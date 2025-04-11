@@ -17,33 +17,6 @@ type ConfigurationWriter interface {
 
 type ProppertyDataType int
 
-const (
-	StringType ProppertyDataType = iota
-	IntType
-	BooleanType
-)
-
-func (p ProppertyDataType) String() string {
-	switch p {
-	case StringType:
-		{
-			return "string"
-		}
-	case IntType:
-		{
-			return "int"
-		}
-	case BooleanType:
-		{
-			return "boolean"
-		}
-	default:
-		{
-			return "undefined"
-		}
-	}
-}
-
 type ConfigurationManager struct {
 	properties map[string]any
 	paths      []string
