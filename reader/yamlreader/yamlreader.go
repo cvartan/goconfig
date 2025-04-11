@@ -1,17 +1,16 @@
-package jsonreader
+package yamlreader
 
 import (
-	"encoding/json"
 	"os"
 
 	"github.com/cvartan/goconfig/mapconv"
 	"github.com/cvartan/goconfig/reader/updater"
+	"gopkg.in/yaml.v3"
 )
 
-type JsonConfigurationReader struct {
-}
+type YamlConfigurationReader struct{}
 
-func (r *JsonConfigurationReader) Read(filename string) (props map[string]any, err error) {
+func (r *YamlConfigurationReader) Read(filename string) (props map[string]any, err error) {
 	var fs []byte
 	fs, err = os.ReadFile(filename)
 	if err != nil {
@@ -19,7 +18,8 @@ func (r *JsonConfigurationReader) Read(filename string) (props map[string]any, e
 	}
 
 	var propertySource map[string]any
-	err = json.Unmarshal(fs, &propertySource)
+	err = yaml.Unmarshal(fs, &propertySource)
+
 	if err != nil {
 		return
 	}

@@ -30,3 +30,5 @@ go.work.sum
 # test configuration file
 config.json
 config_out.json
+config.yml
+config_out.yml
