@@ -15,8 +15,6 @@ type ConfigurationWriter interface {
 	Write(string, map[string]any) error
 }
 
-type ProppertyDataType int
-
 type ConfigurationManager struct {
 	properties map[string]any
 	paths      []string
