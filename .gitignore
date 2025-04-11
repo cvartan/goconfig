@@ -23,3 +23,10 @@ go.work.sum
 
 # env file
 .env
+
+# test file
+*_test.go
+
+# test configuration file
+config.json
+config_out.json
