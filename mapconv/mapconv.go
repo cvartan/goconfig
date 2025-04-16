@@ -2,6 +2,7 @@ package mapconv
 
 import (
 	"maps"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,37 @@ func parseMapToPropertyMap(prefix string, source map[string]any) map[string]any 
 		case map[string]any:
 			{
 				m := parseMapToPropertyMap(key, t)
+				maps.Copy(result, m)
+			}
+		case []any:
+			{
+				m := parseArrayToPropertyMap(key, t)
+				maps.Copy(result, m)
+			}
+		default:
+			{
+				result[key] = t
+			}
+		}
+	}
+
+	return result
+}
+
+func parseArrayToPropertyMap(prefix string, source []any) map[string]any {
+	result := make(map[string]any, len(source))
+	for i, v := range source {
+		key := prefix + strconv.Itoa(i) + "."
+
+		switch t := v.(type) {
+		case map[string]any:
+			{
+				m := parseMapToPropertyMap(key, t)
+				maps.Copy(result, m)
+			}
+		case []any:
+			{
+				m := parseArrayToPropertyMap(key, t)
 				maps.Copy(result, m)
 			}
 		default:
