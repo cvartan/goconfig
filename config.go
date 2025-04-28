@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"strings"
 )
 
 type ConfigurationReader interface {
@@ -139,7 +140,7 @@ func (cm *ConfigurationManager) FillConfig(config any) (err error) {
 		switch f.Type.Kind() {
 		case reflect.Struct:
 			{
-				buf := collectStructFileds(c.FieldByName(f.Name), f)
+				buf := collectStructFields(c.FieldByName(f.Name), f)
 				v = append(v, buf...)
 			}
 		case reflect.Array, reflect.Slice:
@@ -196,14 +197,14 @@ type fieldListItem struct {
 	field reflect.StructField // Поле
 }
 
-func collectStructFileds(structValue reflect.Value, structField reflect.StructField) []fieldListItem {
+func collectStructFields(structValue reflect.Value, structField reflect.StructField) []fieldListItem {
 	result := make([]fieldListItem, 0, 16)
 	fields := reflect.VisibleFields(structField.Type)
 	for _, f := range fields {
 		switch f.Type.Kind() {
 		case reflect.Struct:
 			{
-				innerFields := collectStructFileds(structValue.FieldByName(f.Name), f)
+				innerFields := collectStructFields(structValue.FieldByName(f.Name), f)
 				result = append(result, innerFields...)
 			}
 		case reflect.Array, reflect.Slice:
@@ -238,4 +239,16 @@ func (cm *ConfigurationManager) Delete(propertyName string) {
 
 func (cm *ConfigurationManager) GetAll() map[string]any {
 	return maps.Clone(cm.properties)
+}
+
+func (cm *ConfigurationManager) Lookup(param string) (result map[string]any) {
+	result = make(map[string]any, len(cm.properties))
+
+	for k, v := range cm.properties {
+		if strings.HasPrefix(k, param) {
+			result[k] = v
+		}
+	}
+
+	return
 }

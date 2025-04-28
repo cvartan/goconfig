@@ -19,7 +19,7 @@ func parseMapToPropertyMap(prefix string, source map[string]any) map[string]any 
 		if prefix != "" {
 			key = key + "."
 		}
-		key = key + strings.ToLower(k)
+		key = key + k
 
 		switch t := v.(type) {
 		case map[string]any:
@@ -45,7 +45,7 @@ func parseMapToPropertyMap(prefix string, source map[string]any) map[string]any 
 func parseArrayToPropertyMap(prefix string, source []any) map[string]any {
 	result := make(map[string]any, len(source))
 	for i, v := range source {
-		key := prefix + strconv.Itoa(i) + "."
+		key := prefix + "." + strconv.Itoa(i)
 
 		switch t := v.(type) {
 		case map[string]any:

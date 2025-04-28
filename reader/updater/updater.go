@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func ParseEnvPlaveholders(props map[string]any) {
+func ParseEnvPlaceholders(props map[string]any) {
 	for k, v := range props {
 		switch str := v.(type) {
 		case string:
@@ -95,7 +95,7 @@ func parseValuePlaceholder(str string) any {
 
 func ReplaceValueByEnv(props map[string]any) {
 	for k, v := range props {
-		envVar := strings.ToUpper(strings.ReplaceAll(k, ".", "_"))
+		envVar := strings.ReplaceAll(k, ".", "_")
 		envVal := os.Getenv(envVar)
 		if envVal != "" {
 			switch v.(type) {

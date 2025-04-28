@@ -27,7 +27,7 @@ func (r *JsonConfigurationReader) Read(filename string) (props map[string]any, e
 	props = mapconv.ParseMapToPropertyMap(propertySource)
 
 	// Устанавливаем значения свойств записанные как ссылка на переменную окружения
-	updater.ParseEnvPlaveholders(props)
+	updater.ParseEnvPlaceholders(props)
 	// Заменяем значения свойств если есть переменная окружения, в соответствующем формате, в которой определено другое значение (например, для переопределения свойств из конфигурационного файла при запуске приложения в докере)
 	updater.ReplaceValueByEnv(props)
 
