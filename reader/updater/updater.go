@@ -77,7 +77,7 @@ func parseValuePlaceholder(str string) any {
 		defValue = parts[1]
 	}
 
-	paramValue := os.Getenv(envValue)
+	paramValue := os.Getenv(strings.ToUpper(envValue))
 	if paramValue == "" {
 		paramValue = defValue
 	}
@@ -96,7 +96,7 @@ func parseValuePlaceholder(str string) any {
 func ReplaceValueByEnv(props map[string]any) {
 	for k, v := range props {
 		envVar := strings.ReplaceAll(k, ".", "_")
-		envVal := os.Getenv(envVar)
+		envVal := os.Getenv(strings.ToUpper(envVar))
 		if envVal != "" {
 			switch v.(type) {
 			case bool:
