@@ -107,7 +107,7 @@ func ReplaceValueByEnv(props map[string]any) {
 				}
 			case int:
 				{
-					if val, err := strconv.Atoi(envVal); err != nil {
+					if val, err := strconv.Atoi(envVal); err == nil {
 						props[k] = val
 					}
 				}
