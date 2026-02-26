@@ -1,0 +1,37 @@
+{
+    "app":{
+        "name":"Configuration test",
+        "version":1,
+        "info":{
+            "author":"Constantine Vartanians",
+            "lang":"ru",
+            "site":"github.com/cvartan/goconfig"
+        }
+    },
+    "test":{
+        "test_int":100,
+        "test_bool":true,
+        "test_str":"string",
+        "test_array_values":[100,200,300],
+        "test_array_obj":[
+            {
+                "name":"val1",
+                "value":100
+            },
+            {
+                "name":"val1",
+                "value":200
+            },
+            {
+                "name":"val1",
+                "value":300
+            }          
+        ]
+    },
+    "env":{
+        "strenv":"${CONF_TEST_STRING:alpha value}",
+        "boolenv":"${CONF_TEST_BOOL:true}",
+        "intenv":"${CONF_TEST_INT:300}",
+        "compenv1":"test: ${CONF_TEST_BOOL:true}"
+    }
+}
