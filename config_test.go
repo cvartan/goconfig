@@ -48,7 +48,7 @@ var jsonConfig string = `
             {
                 "name":"value3",
                 "value":300
-            }          
+            }
         ]
     },
     "env":{
@@ -148,31 +148,18 @@ func deleteFile(filePath string) {
 	os.Remove(filePath)
 }
 
-/* func shim(a ...any) []any {
-	return a
-} */
-
-func mustParameter(t *testing.T, value *goconfig.Parameter) *goconfig.Parameter {
-	if value != nil {
-		return value
-	}
-
-	t.Fatal()
-	return nil
-}
-
 func checkConfig(config *goconfig.Configuration, t *testing.T) {
-	assert.Equal(t, int64(100), mustParameter(t, config.Get("test.test_int")).Int())
-	assert.Equal(t, float64(100.00), mustParameter(t, config.Get("test.test_float")).Float())
-	assert.Equal(t, true, mustParameter(t, config.Get("test.test_bool")).Bool())
-	assert.Equal(t, "test string", mustParameter(t, config.Get("test.test_str")).String())
-	assert.Equal(t, int64(245), mustParameter(t, config.Get("env.intenv")).Int())
-	assert.Equal(t, true, mustParameter(t, config.Get("env.boolenv")).Bool())
-	assert.Equal(t, "goconfig test string", mustParameter(t, config.Get("env.strenv")).String())
+	assert.Equal(t, int64(100), config.Get("test.test_int").Int())
+	assert.Equal(t, float64(100.00), config.Get("test.test_float").Float())
+	assert.Equal(t, true, config.Get("test.test_bool").Bool())
+	assert.Equal(t, "test string", config.Get("test.test_str").String())
+	assert.Equal(t, int64(245), config.Get("env.intenv").Int())
+	assert.Equal(t, true, config.Get("env.boolenv").Bool())
+	assert.Equal(t, "goconfig test string", config.Get("env.strenv").String())
 
-	assert.Equal(t, int64(100), mustParameter(t, config.Get("test.test_array_values.0")).Int())
-	assert.Equal(t, int64(200), mustParameter(t, config.Get("test.test_array_values.1")).Int())
-	assert.Equal(t, int64(300), mustParameter(t, config.Get("test.test_array_values.2")).Int())
+	assert.Equal(t, int64(100), config.Get("test.test_array_values.0").Int())
+	assert.Equal(t, int64(200), config.Get("test.test_array_values.1").Int())
+	assert.Equal(t, int64(300), config.Get("test.test_array_values.2").Int())
 
 	values := config.Lookup("test.test_array_values.")
 
@@ -188,12 +175,12 @@ func checkConfig(config *goconfig.Configuration, t *testing.T) {
 	float_values_arr := config.GetFloatArray("test.test_float_array_values")
 	assert.ElementsMatch(t, []float64{100.00, 200.00, 300.00}, float_values_arr)
 
-	assert.Equal(t, "value1", mustParameter(t, config.Get("test.test_array_obj.0.name")).String())
-	assert.Equal(t, int64(100), mustParameter(t, config.Get("test.test_array_obj.0.value")).Int())
-	assert.Equal(t, "value2", mustParameter(t, config.Get("test.test_array_obj.1.name")).String())
-	assert.Equal(t, int64(200), mustParameter(t, config.Get("test.test_array_obj.1.value")).Int())
-	assert.Equal(t, "value3", mustParameter(t, config.Get("test.test_array_obj.2.name")).String())
-	assert.Equal(t, int64(300), mustParameter(t, config.Get("test.test_array_obj.2.value")).Int())
+	assert.Equal(t, "value1", config.Get("test.test_array_obj.0.name").String())
+	assert.Equal(t, int64(100), config.Get("test.test_array_obj.0.value").Int())
+	assert.Equal(t, "value2", config.Get("test.test_array_obj.1.name").String())
+	assert.Equal(t, int64(200), config.Get("test.test_array_obj.1.value").Int())
+	assert.Equal(t, "value3", config.Get("test.test_array_obj.2.name").String())
+	assert.Equal(t, int64(300), config.Get("test.test_array_obj.2.value").Int())
 }
 
 func checkStruct(obj *TestConfig, t *testing.T) {
@@ -219,6 +206,12 @@ func TestReadJsonConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer deleteFile(cfile)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Panic in test with message: %v", r)
+		}
+	}()
 
 	addEnvVariables()
 
@@ -246,6 +239,12 @@ func TestReadYamlConfig(t *testing.T) {
 	}
 	defer deleteFile(cfile)
 
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Panic in test with message: %v", r)
+		}
+	}()
+
 	addEnvVariables()
 
 	options := &goconfig.Options{
@@ -271,6 +270,12 @@ func TestReadTomlConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer deleteFile(cfile)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Panic in test with message: %v", r)
+		}
+	}()
 
 	addEnvVariables()
 
