@@ -139,6 +139,7 @@ func main() {
 | `NewConfiguration(format string, options ConfigurationOptions) *Configuration` | Create a configuration manager |
 | `Configuration.Bind(object any)` | Bind a struct to the configuration (struct must have attributes tagged with `config`) |
 | `Configuration.Apply()` | Load and apply configuration |
+| `Configuration.Add(key string, valueType ValueDataType)`| Add new parameter without value |
 | `Configuration.Set(key string, value any)` | Set a parameter value (or add it if missing) |
 | `Configuration.Get(key string) *Parameter` | Get a configuration parameter |
 | `Configuration.GetAll() []*Parameter` | Get all parameters |

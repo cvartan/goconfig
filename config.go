@@ -88,6 +88,37 @@ type Parameter struct {
 	valueType reflect.Kind
 }
 
+type ValueDataType int
+
+const (
+	String ValueDataType = iota
+	Int
+	Float
+	Bool
+)
+
+func (t ValueDataType) Kind() reflect.Kind {
+	switch t {
+	case 0:
+		{
+			return reflect.String
+		}
+	case 1:
+		{
+			return reflect.Int64
+		}
+	case 2:
+		{
+			return reflect.Float64
+		}
+	case 3:
+		{
+			return reflect.Bool
+		}
+	}
+	panic("[config:getType:001] unsupported data type")
+}
+
 // Get configuration parameter name
 func (p *Parameter) Name() string {
 	return p.name
@@ -228,7 +259,7 @@ func NewConfiguration(options *Options) *Configuration {
 }
 
 // Add or modify parameter value
-func (cm *Configuration) setProperty(key string, value any) {
+func (cm *Configuration) setParameterValue(key string, value any) {
 	if value == nil {
 		panic(fmt.Sprintf("[config:set:03] value for key=%s must be defined", key))
 	}
@@ -242,6 +273,7 @@ func (cm *Configuration) setProperty(key string, value any) {
 			if tp == reflect.Uint64 {
 				tp = reflect.Int64
 			}
+
 			// Check existing parameters
 			if p, ok := cm.properties[key]; ok {
 
@@ -267,6 +299,27 @@ func (cm *Configuration) setProperty(key string, value any) {
 	}
 }
 
+func (cm *Configuration) Add(key string, valueType ValueDataType) {
+	t := valueType.Kind()
+
+	if p, ok := cm.properties[key]; ok {
+		if p.valueType != t {
+			panic("[config:defParameter:001] parameter exists with incompatible data types")
+		}
+		return
+	}
+
+	p := &Parameter{
+		name:      key,
+		valueType: t,
+		value:     nil,
+	}
+
+	replaceByEnvValues(p)
+
+	cm.properties[key] = p
+}
+
 func (cm *Configuration) Set(key string, value any) {
 	if key == "" {
 		panic("[config:set:01] key is empty")
@@ -276,7 +329,7 @@ func (cm *Configuration) Set(key string, value any) {
 		panic("[config:set:02] value is empty")
 	}
 
-	cm.setProperty(key, value)
+	cm.setParameterValue(key, value)
 
 }
 
@@ -310,7 +363,7 @@ func (cm *Configuration) Apply() {
 
 	// Fill cm.properties with values from received properties
 	for k, v := range props {
-		cm.setProperty(k, v)
+		cm.setParameterValue(k, v)
 	}
 
 	cm.fillStructFields()

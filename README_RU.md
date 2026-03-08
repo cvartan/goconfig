@@ -152,6 +152,7 @@ func main() {
 | `NewConfiguration(format string, options ConfigurationOptions) *Configuration` | Создание менеджера конфигурации |
 | `Configuration.Bind(object any)` | Привязка структуры к конфигурации (в структуре должны быть атрибуты, отмеченные тэгом config) |
 | `Configuration.Apply()` | Загрузка и применение конфигурации |
+| `Configuration.Add(key string, valueType ValueDataType)`| Добавление параметра без установки значения |
 | `Configuration.Set(key string, value any)` | Установка значения параметра (или добавление при его отсутствии) |
 | `Configuration.Get(key string) *Parameter` | Получение параметра конфигурации |
 | `Configuration.GetAll() []*Parameter` | Получение всех параметров |
