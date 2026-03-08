@@ -107,6 +107,11 @@ func addEnvVariables() {
 	os.Setenv("GOCONFIG_STRATTR", "test string")
 	os.Setenv("GOCONFIG_INTATTR", "1034")
 	os.Setenv("GOCONFIG_BOOLATTR", "true")
+
+	os.Setenv("GOCONFIG_ADD_STRING", "test")
+	os.Setenv("GOCONFIG_ADD_INT", "100")
+	os.Setenv("GOCONFIG_ADD_FLOAT", "200.00")
+	os.Setenv("GOCONFIG_ADD_BOOLEAN", "true")
 }
 
 func generateFileName(ext string) string {
@@ -181,6 +186,11 @@ func checkConfig(config *goconfig.Configuration, t *testing.T) {
 	assert.Equal(t, int64(200), config.Get("test.test_array_obj.1.value").Int())
 	assert.Equal(t, "value3", config.Get("test.test_array_obj.2.name").String())
 	assert.Equal(t, int64(300), config.Get("test.test_array_obj.2.value").Int())
+
+	assert.Equal(t, "test", config.Get("goconfig.add.string").String())
+	assert.Equal(t, int64(100), config.Get("goconfig.add.int").Int())
+	assert.Equal(t, float64(200.00), config.Get("goconfig.add.float").Float())
+	assert.Equal(t, true, config.Get("goconfig.add.boolean").Bool())
 }
 
 func checkStruct(obj *TestConfig, t *testing.T) {
@@ -197,6 +207,13 @@ func checkStruct(obj *TestConfig, t *testing.T) {
 	assert.Equal(t, int32(1034), obj.SubStructAttr.IntEnvAttr)
 	assert.Equal(t, "test string", obj.SubStructAttr.StrEnvAttr)
 	assert.Equal(t, true, obj.SubStructAttr.BoolEnvAttr)
+}
+
+func addEmptyParams(config *goconfig.Configuration) {
+	config.Add("goconfig.add.string", goconfig.String)
+	config.Add("goconfig.add.int", goconfig.Int)
+	config.Add("goconfig.add.float", goconfig.Float)
+	config.Add("goconfig.add.boolean", goconfig.Bool)
 }
 
 func TestReadJsonConfig(t *testing.T) {
@@ -224,6 +241,7 @@ func TestReadJsonConfig(t *testing.T) {
 
 	obj := &TestConfig{}
 	config.Bind(obj)
+	addEmptyParams(config)
 	config.Apply()
 
 	checkConfig(config, t)
@@ -256,6 +274,7 @@ func TestReadYamlConfig(t *testing.T) {
 
 	obj := &TestConfig{}
 	config.Bind(obj)
+	addEmptyParams(config)
 	config.Apply()
 
 	checkConfig(config, t)
@@ -288,6 +307,7 @@ func TestReadTomlConfig(t *testing.T) {
 
 	obj := &TestConfig{}
 	config.Bind(obj)
+	addEmptyParams(config)
 	config.Apply()
 
 	checkConfig(config, t)
