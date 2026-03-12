@@ -9,13 +9,18 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cvartan/goconfig/envvar"
 	"github.com/cvartan/goconfig/parser/jsonparser"
 	"github.com/cvartan/goconfig/parser/tomlparser"
 	"github.com/cvartan/goconfig/parser/yamlparser"
 	"github.com/cvartan/goconfig/reader/filereader"
+	"github.com/cvartan/goconfig/utils"
 )
 
-const initMapLen int = 8
+const (
+	initMapLen int = 8
+	initArrayLen
+)
 
 type Reader interface {
 	Read(source string) ([]byte, error)
@@ -40,12 +45,12 @@ func RegisterParser(format string, parser Parser) {
 }
 
 type Options struct {
-	Path     string
-	Source   string
-	Filename string
-	Format   string
-	Reader   Reader
-	Parser   Parser
+	Path     string // Path to catalog with the configuration file
+	Source   string // Path to the configuration (may refer to non-file sources with custom readers)
+	Filename string // Filename of the configuration file
+	Format   string // Data format in the configuration (default supported formats: json, yaml or toml)
+	Reader   Reader // Custom configuration reader (see Reader interface)
+	Parser   Parser // Custom configuration parser (see Parser interface)
 }
 
 // Main type for working with application configuration.
@@ -57,6 +62,7 @@ type Configuration struct {
 	reader             Reader
 	parser             Parser
 	source             string
+	envVars            *envvar.EnvVariables
 }
 
 type fieldListItem struct {
@@ -67,19 +73,11 @@ type fieldListItem struct {
 }
 
 var (
-	defaultPath       string = *flag.String("config.path", getWD(), "path to the configuration file")
+	defaultPath       string = *flag.String("config.path", utils.GetWD(), "path to the configuration file")
 	defaultFormat     string = *flag.String("config.format", "json", "format of the configuration file")
 	defaultFileName   string = *flag.String("config.filename", "config."+defaultFormat, "name of the configuration file")
 	defaultFileSource string = *flag.String("config.source", "", "path to configuration sources")
 )
-
-func getWD() string {
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-
-	panic("[config:getWd:01] Can't get working directory")
-}
 
 // Type for configuration parameter
 type Parameter struct {
@@ -209,7 +207,6 @@ func (p *Parameter) String() string {
 }
 
 func NewConfiguration(options *Options) *Configuration {
-
 	opt := options
 
 	if options == nil {
@@ -249,10 +246,12 @@ func NewConfiguration(options *Options) *Configuration {
 	}
 
 	cm := &Configuration{
-		properties: make(map[string]*Parameter, initMapLen),
-		reader:     opt.Reader,
-		parser:     opt.Parser,
-		source:     opt.Source,
+		properties:         make(map[string]*Parameter, initMapLen),
+		reader:             opt.Reader,
+		bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
+		parser:             opt.Parser,
+		source:             opt.Source,
+		envVars:            envvar.NewEnvVariables(),
 	}
 
 	return cm
@@ -288,7 +287,7 @@ func (cm *Configuration) setParameterValue(key string, value any) {
 				valueType: tp,
 			}
 
-			replaceByEnvValues(cv)
+			cm.replaceByEnvValues(cv)
 
 			cm.properties[key] = cv
 		}
@@ -315,7 +314,7 @@ func (cm *Configuration) Add(key string, valueType ValueDataType) {
 		value:     nil,
 	}
 
-	replaceByEnvValues(p)
+	cm.replaceByEnvValues(p)
 
 	cm.properties[key] = p
 }
@@ -355,7 +354,7 @@ func (cm *Configuration) Apply() {
 	}
 
 	// Set property values written as references to environment variables
-	parseEnvPlaceholders(props)
+	cm.parseEnvPlaceholders(props)
 
 	// Perform correction of numeric values - converting them to int64 or float64 types
 	// For the case when all numeric values are converted to one type when reading from the configuration source (e.g., to float64 during JSON deserialization), the correct type is determined by value during reading (reader's Read method).
@@ -370,7 +369,7 @@ func (cm *Configuration) Apply() {
 }
 
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
-func parseEnvPlaceholders(props map[string]any) {
+func (cm *Configuration) parseEnvPlaceholders(props map[string]any) {
 	for k, v := range props {
 		switch str := v.(type) {
 		case string:
@@ -378,13 +377,13 @@ func parseEnvPlaceholders(props map[string]any) {
 				pc := strings.Count(str, "${")
 				if pc > 0 {
 					if pc == 1 && strings.HasPrefix(str, "${") && strings.HasSuffix(str, "}") {
-						props[k] = parseValuePlaceholder(str)
+						props[k] = cm.parseValuePlaceholder(str)
 						continue
 					}
 
 					values := extractPlaceholders(str)
 					for _, v := range values {
-						value := parseValuePlaceholder(v)
+						value := cm.parseValuePlaceholder(v)
 						str = strings.Replace(str, "${"+v+"}", fmt.Sprintf("%v", value), 1)
 					}
 
@@ -413,7 +412,7 @@ func extractPlaceholders(str string) (result []string) {
 	return
 }
 
-func parseValuePlaceholder(str string) any {
+func (cm *Configuration) parseValuePlaceholder(str string) any {
 	buf := strings.TrimFunc(
 		str,
 		func(r rune) bool {
@@ -440,7 +439,7 @@ func parseValuePlaceholder(str string) any {
 		defValue = parts[1]
 	}
 
-	paramValue := os.Getenv(strings.ToUpper(envValue))
+	paramValue := cm.envVars.GetEnvValue(strings.ToUpper(envValue))
 	if paramValue == "" {
 		paramValue = defValue
 	}
@@ -513,10 +512,10 @@ func correctNumberValues(props map[string]any) {
 }
 
 // Replace property values if there is an environment variable in the corresponding format that defines a different value (e.g., for overriding properties from the configuration file when running the application in Docker)
-func replaceByEnvValues(value *Parameter) {
+func (cm *Configuration) replaceByEnvValues(value *Parameter) {
 
 	envVar := strings.ReplaceAll(value.name, ".", "_")
-	envVal := os.Getenv(strings.ToUpper(envVar))
+	envVal := cm.envVars.GetEnvValue(strings.ToUpper(envVar))
 	if envVal != "" {
 		switch value.Type() {
 		case reflect.Int64:
@@ -744,7 +743,7 @@ func (cm *Configuration) bindStructField(f *fieldListItem) {
 					valueType: reflect.Int64,
 				}
 
-				replaceByEnvValues(cv)
+				cm.replaceByEnvValues(cv)
 
 				cm.properties[tagValue] = cv
 			}
@@ -756,7 +755,7 @@ func (cm *Configuration) bindStructField(f *fieldListItem) {
 					valueType: reflect.Float64,
 				}
 
-				replaceByEnvValues(cv)
+				cm.replaceByEnvValues(cv)
 
 				cm.properties[tagValue] = cv
 			}
@@ -768,7 +767,7 @@ func (cm *Configuration) bindStructField(f *fieldListItem) {
 					valueType: reflect.Bool,
 				}
 
-				replaceByEnvValues(cv)
+				cm.replaceByEnvValues(cv)
 
 				cm.properties[tagValue] = cv
 			}
@@ -780,7 +779,7 @@ func (cm *Configuration) bindStructField(f *fieldListItem) {
 					valueType: reflect.String,
 				}
 
-				replaceByEnvValues(cv)
+				cm.replaceByEnvValues(cv)
 
 				cm.properties[tagValue] = cv
 			}
@@ -891,7 +890,7 @@ func typeSimplified(source reflect.Kind) reflect.Kind {
 }
 
 func init() {
-	parsers = make(map[string]Parser, 1)
+	parsers = make(map[string]Parser, 3)
 	RegisterParser("json", &jsonparser.JsonConfigurationParser{})
 	RegisterParser("yaml", &yamlparser.YamlConfigurationParser{})
 	RegisterParser("toml", &tomlparser.TomlConfigurationParser{})

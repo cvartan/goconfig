@@ -5,7 +5,8 @@
 Configuration values are loaded from the following sources (in order of priority):
 
 1. Configuration files (JSON, YAML, TOML)
-2. Environment variables
+2. Environment variables (OS environment variables take precedence)
+3. `.env` file (automatically loaded from the application's working directory)
 
 Automatic binding of configuration values to exported struct fields is supported.
 
@@ -15,6 +16,7 @@ Automatic binding of configuration values to exported struct fields is supported
 
 - JSON, YAML, TOML configuration files
 - Environment variable support (with default values)
+- Automatic `.env` file loading from the working directory
 - Binding configuration values to struct fields via struct tags
 - Automatic type detection (`string`, `bool`, `int64`, `float64`)
 - Minimal and explicit Go-style API
@@ -35,7 +37,7 @@ go get github.com/cvartan/goconfig
 - Values of unsupported types are ignored
 - Environment variable references can be used as values: "${ENV_VARIABLE:DEFAULT_VALUE}"
 
-The value type is determined either by the environment variable or by the default value.  
+The value type is determined either by the environment variable or by the default value.
 The default value may be omitted (format `${ENV_VARIABLE}`).
 
 If a parameter's value is a string, variable substitution within the value is allowed:
@@ -44,6 +46,22 @@ If a parameter's value is a string, variable substitution within the value is al
     "url": "{$SRV_PROTOCOL:https}://{$SRV_NAME}:{$SRV_PORT:443}/api"
 }
 ```
+
+### `.env` File Support
+
+The library automatically loads environment variables from a `.env` file in the application's working directory (if present).
+
+Format:
+```
+# Comment lines start with #
+DB_HOST=localhost
+DB_PORT=5432
+DEBUG=true
+```
+
+- OS environment variables take precedence over `.env` file values
+- The `.env` file is optional and silently ignored if not found
+- Supports `KEY=VALUE` format with optional quotes
 
 ### JSON and YAML
 
@@ -92,7 +110,7 @@ The `Options` struct is used to configure the configuration manager:
 type Options struct {
     Path     string // Path to the configuration file directory (without trailing separator)
     Filename string // Configuration filename (default: config.json)
-    Format   string // Data format in the configuration (default supported formats: json and yaml)
+    Format   string // Data format in the configuration (default supported formats: json, yaml or toml)
     Source   string // Path to the configuration (may refer to non-file sources with custom readers)
 }
 ```
