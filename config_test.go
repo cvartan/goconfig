@@ -17,6 +17,7 @@ type TestConfig struct {
 	FloatAttr     float64 `config:"test.test_float"`
 	BoolAttr      bool    `config:"test.test_bool"`
 	StringAttr    string  `config:"test.test_str"`
+	Unknown       string  `config:"test.unknown"`
 	SubStructAttr struct {
 		Int16Attr   int16  `config:"test.test_int"`
 		BoolAttr    bool   `config:"test.test_bool"`

@@ -2,7 +2,10 @@ package envvar
 
 import (
 	"bufio"
+	"fmt"
 	"os"
+	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/cvartan/goconfig/utils"
@@ -53,7 +56,7 @@ func NewEnvVariables() *EnvVariables {
 	return e
 }
 
-func (e *EnvVariables) GetEnvValue(key string) string {
+func (e *EnvVariables) GetValue(key string) string {
 	// First check OS environment variable
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -67,4 +70,41 @@ func (e *EnvVariables) GetEnvValue(key string) string {
 	}
 
 	return ""
+}
+
+func (e *EnvVariables) GetValueForType(key string, targetType reflect.Kind) any {
+	v := e.GetValue(key)
+	if v == "" {
+		return nil
+	}
+	switch utils.TypeSimplified(targetType) {
+	case reflect.Int64, reflect.Uint64:
+		{
+			tv, err := strconv.Atoi(v)
+			if err != nil {
+				panic(fmt.Sprintf("Can't convert string value (%s) to int", v))
+			}
+			return tv
+		}
+	case reflect.Float64:
+		{
+			tv, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				panic(fmt.Sprintf("Can't convert string value (%s) to float", v))
+			}
+			return tv
+		}
+	case reflect.Bool:
+		{
+			tv, err := strconv.ParseBool(v)
+			if err != nil {
+				panic(fmt.Sprintf("Can't convert string value (%s) to boolean", v))
+			}
+			return tv
+		}
+	default:
+		{
+			return v
+		}
+	}
 }

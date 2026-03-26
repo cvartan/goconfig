@@ -56,13 +56,13 @@ type Options struct {
 // Main type for working with application configuration.
 // Contains methods for accessing configuration parameters
 type Configuration struct {
-	mu                 sync.Mutex
-	properties         map[string]*Parameter
-	bindedStructFields []*fieldListItem
-	reader             Reader
-	parser             Parser
-	source             string
-	envVars            *envvar.EnvVariables
+	mu         sync.Mutex
+	properties map[string]*Parameter
+	// bindedStructFields []*fieldListItem
+	reader  Reader
+	parser  Parser
+	source  string
+	envVars *envvar.EnvVariables
 }
 
 type fieldListItem struct {
@@ -70,6 +70,81 @@ type fieldListItem struct {
 	field        reflect.StructField // Field
 	fieldType    reflect.Kind        // Field data type
 	configVar    string              // Configuration parameter associated with this field
+}
+
+func (f *fieldListItem) setValue(value *Parameter) {
+	if value.value == nil {
+		return
+	}
+	switch f.fieldType {
+	case reflect.Float64:
+		{
+			if value.Type() != reflect.Float64 {
+				panic(fmt.Sprintf("[config:struct:01] incorrect type for field %s (must be float)", f.field.Name))
+			}
+			floatval, ok := value.Value().(float64)
+			if !ok {
+				panic(fmt.Sprintf("[config:struct:02] incorrect type conversion for float field %s", f.field.Name))
+			}
+			floatf := f.parentStruct.FieldByName(f.field.Name)
+			if floatf.OverflowFloat(floatval) {
+				panic(fmt.Sprintf("[config:struct:03] can't set float64 value %f for float field %s", floatval, f.field.Name))
+			}
+			floatf.SetFloat(floatval)
+		}
+	case reflect.Int64:
+		{
+			if value.Type() != reflect.Int64 {
+				panic(fmt.Sprintf("[config:struct:04] incorrect type for field %s (must be integer)", f.field.Name))
+			}
+
+			intval := value.Value().(int64)
+
+			intf := f.parentStruct.FieldByName(f.field.Name)
+			if intf.OverflowInt(intval) {
+				panic(fmt.Sprintf("[config:struct:05] can't set int64 value %d for integer field %s", intval, f.field.Name))
+			}
+			intf.SetInt(intval)
+		}
+	case reflect.Uint64:
+		{
+			if value.Type() != reflect.Int64 {
+				panic(fmt.Sprintf("[config:struct:06] incorrect type for field %s (must be integer)", f.field.Name))
+			}
+
+			intval := uint64(value.Value().(int64))
+
+			intf := f.parentStruct.FieldByName(f.field.Name)
+			if intf.OverflowUint(intval) {
+				panic(fmt.Sprintf("[config:struct:07] can't set uint64 value %d for unsigned integer field %s", intval, f.field.Name))
+			}
+			intf.SetUint(intval)
+		}
+	case reflect.Bool:
+		{
+			if value.Type() != reflect.Bool {
+				panic(fmt.Sprintf("[config:struct:08] incorrect type for field %s (must be boolean)", f.field.Name))
+			}
+			boolval, ok := value.Value().(bool)
+			if !ok {
+				panic(fmt.Sprintf("[config:struct:09] incorrect type conversion for boolean field %s", f.field.Name))
+			}
+			f.parentStruct.FieldByName(f.field.Name).SetBool(boolval)
+		}
+	case reflect.String:
+		{
+			if value.Type() != reflect.String {
+				panic(fmt.Sprintf("[config:struct:10] incorrect type for field %s (must be string)", f.field.Name))
+			}
+			strval, ok := value.Value().(string)
+			if !ok {
+				panic(fmt.Sprintf("[config:struct:11] incorrect type conversion for string field %s", f.field.Name))
+			}
+			f.parentStruct.FieldByName(f.field.Name).SetString(strval)
+			f.fieldType = reflect.String
+		}
+	}
+
 }
 
 var (
@@ -81,9 +156,11 @@ var (
 
 // Type for configuration parameter
 type Parameter struct {
-	name      string
-	value     any
-	valueType reflect.Kind
+	mu                 sync.Mutex
+	name               string
+	value              any
+	valueType          reflect.Kind
+	bindedStructFields []*fieldListItem
 }
 
 type ValueDataType int
@@ -206,6 +283,50 @@ func (p *Parameter) String() string {
 	return fmt.Sprintf("%v", p.value)
 }
 
+func (p *Parameter) bindStructField(field *fieldListItem) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.bindedStructFields = append(p.bindedStructFields, field)
+	field.setValue(p)
+}
+
+func (p *Parameter) SetValue(value any) {
+	if value == nil {
+		// Pass nil value
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	switch t := utils.TypeSimplified(reflect.TypeOf(value).Kind()); t {
+	case reflect.Int64, reflect.Uint64, reflect.Float64, reflect.Bool, reflect.String:
+		{
+			tp := t
+			if tp == reflect.Uint64 {
+				tp = reflect.Int64
+			}
+
+			if p.Type() != tp {
+				panic(fmt.Sprintf("[config:set:03] incompatible data types between property %s and value", p.name))
+			}
+
+			p.value = value
+
+		}
+	default:
+		{
+			panic(fmt.Sprintf("[config:set:04] unsupported value type: %v", t))
+		}
+	}
+
+	// Set value for linked structure fields
+	for _, f := range p.bindedStructFields {
+		f.setValue(p)
+	}
+}
+
 func NewConfiguration(options *Options) *Configuration {
 	opt := options
 
@@ -246,12 +367,12 @@ func NewConfiguration(options *Options) *Configuration {
 	}
 
 	cm := &Configuration{
-		properties:         make(map[string]*Parameter, initMapLen),
-		reader:             opt.Reader,
-		bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
-		parser:             opt.Parser,
-		source:             opt.Source,
-		envVars:            envvar.NewEnvVariables(),
+		properties: make(map[string]*Parameter, initMapLen),
+		reader:     opt.Reader,
+		// bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
+		parser:  opt.Parser,
+		source:  opt.Source,
+		envVars: envvar.NewEnvVariables(),
 	}
 
 	return cm
@@ -260,63 +381,51 @@ func NewConfiguration(options *Options) *Configuration {
 // Add or modify parameter value
 func (cm *Configuration) setParameterValue(key string, value any) {
 	if value == nil {
-		panic(fmt.Sprintf("[config:set:03] value for key=%s must be defined", key))
-	}
-
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	switch t := typeSimplified(reflect.TypeOf(value).Kind()); t {
-	case reflect.Int64, reflect.Uint64, reflect.Float64, reflect.Bool, reflect.String:
-		{
-			tp := t
-			if tp == reflect.Uint64 {
-				tp = reflect.Int64
-			}
-
-			// Check existing parameters
-			if p, ok := cm.properties[key]; ok {
-
-				if p.Type() != tp {
-					panic(fmt.Sprintf("[config:set:03] incompatible data types between property %s and value", key))
-				}
-			}
-
-			cv := &Parameter{
-				name:      key,
-				value:     value,
-				valueType: tp,
-			}
-
-			cm.replaceByEnvValues(cv)
-
-			cm.properties[key] = cv
-		}
-	default:
-		{
-			panic(fmt.Sprintf("[config:set:04] unsupported value type: %v", t))
-		}
-	}
-}
-
-func (cm *Configuration) Add(key string, valueType ValueDataType) {
-	t := valueType.Kind()
-
-	if p, ok := cm.properties[key]; ok {
-		if p.valueType != t {
-			panic("[config:defParameter:001] parameter exists with incompatible data types")
-		}
+		// Pass not defined configuration parameter
 		return
 	}
 
+	var (
+		cv *Parameter
+		ok bool
+	)
+
+	cv, ok = cm.properties[key]
+
+	if !ok {
+		cv = cm.add(key, utils.TypeSimplified(reflect.TypeOf(value).Kind()))
+	}
+
+	cv.SetValue(value)
+}
+
+// Add new parameter with nil value.
+// Value must be replaced by environment value if it defined.
+func (cm *Configuration) Add(key string, valueType ValueDataType) *Parameter {
+
+	return cm.add(key, valueType.Kind())
+}
+
+func (cm *Configuration) add(key string, valueType reflect.Kind) *Parameter {
+	if p, ok := cm.properties[key]; ok {
+		if p.valueType != valueType {
+			panic("[config:defParameter:001] parameter exists with incompatible data types")
+		}
+		return p
+	}
+
 	p := &Parameter{
-		name:      key,
-		valueType: t,
-		value:     nil,
+		name:               key,
+		valueType:          valueType,
+		value:              nil,
+		bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
 	}
 
 	cm.replaceByEnvValues(p)
 
 	cm.properties[key] = p
+
+	return p
 }
 
 func (cm *Configuration) Set(key string, value any) {
@@ -329,10 +438,9 @@ func (cm *Configuration) Set(key string, value any) {
 	}
 
 	cm.setParameterValue(key, value)
-
 }
 
-// Load and apply the configuration
+// Load and apply the configuration from source
 func (cm *Configuration) Apply() {
 
 	if cm.reader == nil {
@@ -364,8 +472,6 @@ func (cm *Configuration) Apply() {
 	for k, v := range props {
 		cm.setParameterValue(k, v)
 	}
-
-	cm.fillStructFields()
 }
 
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
@@ -439,7 +545,7 @@ func (cm *Configuration) parseValuePlaceholder(str string) any {
 		defValue = parts[1]
 	}
 
-	paramValue := cm.envVars.GetEnvValue(strings.ToUpper(envValue))
+	paramValue := cm.envVars.GetValue(strings.ToUpper(envValue))
 	if paramValue == "" {
 		paramValue = defValue
 	}
@@ -515,7 +621,7 @@ func correctNumberValues(props map[string]any) {
 func (cm *Configuration) replaceByEnvValues(value *Parameter) {
 
 	envVar := strings.ReplaceAll(value.name, ".", "_")
-	envVal := cm.envVars.GetEnvValue(strings.ToUpper(envVar))
+	envVal := cm.envVars.GetValue(strings.ToUpper(envVar))
 	if envVal != "" {
 		switch value.Type() {
 		case reflect.Int64:
@@ -671,7 +777,7 @@ func (cm *Configuration) Bind(object any) {
 					&fieldListItem{
 						parentStruct: c,
 						field:        f,
-						fieldType:    typeSimplified(f.Type.Kind()),
+						fieldType:    utils.TypeSimplified(f.Type.Kind()),
 					},
 				)
 			}
@@ -698,7 +804,7 @@ func (cm *Configuration) collectStructFields(structValue reflect.Value, structFi
 				cm.bindStructField(&fieldListItem{
 					parentStruct: structValue,
 					field:        f,
-					fieldType:    typeSimplified(f.Type.Kind()),
+					fieldType:    utils.TypeSimplified(f.Type.Kind()),
 				})
 			}
 		}
@@ -709,183 +815,15 @@ func (cm *Configuration) collectStructFields(structValue reflect.Value, structFi
 func (cm *Configuration) bindStructField(f *fieldListItem) {
 	tagValue := f.field.Tag.Get("config")
 	if tagValue != "" {
-		cm.mu.Lock()
-		cm.bindedStructFields = append(cm.bindedStructFields, &fieldListItem{
-			parentStruct: f.parentStruct,
-			field:        f.field,
-			fieldType:    f.fieldType,
-			configVar:    tagValue,
-		})
-		cm.mu.Unlock()
-
 		// Check that existing property has same data type as struct attribute
 		if p, ok := cm.properties[tagValue]; ok {
-			tp := f.fieldType
-			if tp == reflect.Uint64 {
-				tp = reflect.Int64
-			}
-
-			if p.Type() != tp {
-				panic(fmt.Sprintf("[config:bindStructField:01] uncompatible data type between parameter %s and field %s", tagValue, f.field.Name))
-			}
-
+			p.bindStructField(f)
 			return
 		}
 
 		// Add new property
-		cm.mu.Lock()
-		switch f.fieldType {
-		case reflect.Int64, reflect.Uint64:
-			{
-				cv := &Parameter{
-					name:      tagValue,
-					value:     f.parentStruct.FieldByName(f.field.Name).Int(),
-					valueType: reflect.Int64,
-				}
-
-				cm.replaceByEnvValues(cv)
-
-				cm.properties[tagValue] = cv
-			}
-		case reflect.Float64:
-			{
-				cv := &Parameter{
-					name:      tagValue,
-					value:     f.parentStruct.FieldByName(f.field.Name).Float(),
-					valueType: reflect.Float64,
-				}
-
-				cm.replaceByEnvValues(cv)
-
-				cm.properties[tagValue] = cv
-			}
-		case reflect.Bool:
-			{
-				cv := &Parameter{
-					name:      tagValue,
-					value:     f.parentStruct.FieldByName(f.field.Name).Bool(),
-					valueType: reflect.Bool,
-				}
-
-				cm.replaceByEnvValues(cv)
-
-				cm.properties[tagValue] = cv
-			}
-		case reflect.String:
-			{
-				cv := &Parameter{
-					name:      tagValue,
-					value:     f.parentStruct.FieldByName(f.field.Name).String(),
-					valueType: reflect.String,
-				}
-
-				cm.replaceByEnvValues(cv)
-
-				cm.properties[tagValue] = cv
-			}
-		}
-		cm.mu.Unlock()
-	}
-}
-
-// Filling fields of bound structures with configuration parameter values
-func (cm *Configuration) fillStructFields() {
-	// Iterate through configuration struct fields and set values from received property list
-	for _, f := range cm.bindedStructFields {
-		tagValue := f.configVar
-		if propValue, ok := cm.properties[tagValue]; ok {
-			switch f.fieldType {
-			case reflect.Float64:
-				{
-					if propValue.Type() != reflect.Float64 {
-						panic(fmt.Sprintf("[config:struct:01] incorrect type for field %s (must be float)", f.field.Name))
-					}
-					floatval, ok := propValue.Value().(float64)
-					if !ok {
-						panic(fmt.Sprintf("[config:struct:02] incorrect type conversion for float field %s", f.field.Name))
-					}
-					floatf := f.parentStruct.FieldByName(f.field.Name)
-					if floatf.OverflowFloat(floatval) {
-						panic(fmt.Sprintf("[config:struct:03] can't set float64 value %f for float field %s", floatval, f.field.Name))
-					}
-					floatf.SetFloat(floatval)
-				}
-			case reflect.Int64:
-				{
-					if propValue.Type() != reflect.Int64 {
-						panic(fmt.Sprintf("[config:struct:04] incorrect type for field %s (must be integer)", f.field.Name))
-					}
-
-					intval := propValue.Value().(int64)
-
-					intf := f.parentStruct.FieldByName(f.field.Name)
-					if intf.OverflowInt(intval) {
-						panic(fmt.Sprintf("[config:struct:05] can't set int64 value %d for integer field %s", intval, f.field.Name))
-					}
-					intf.SetInt(intval)
-				}
-			case reflect.Uint64:
-				{
-					if propValue.Type() != reflect.Int64 {
-						panic(fmt.Sprintf("[config:struct:06] incorrect type for field %s (must be integer)", f.field.Name))
-					}
-
-					intval := uint64(propValue.Value().(int64))
-
-					intf := f.parentStruct.FieldByName(f.field.Name)
-					if intf.OverflowUint(intval) {
-						panic(fmt.Sprintf("[config:struct:07] can't set uint64 value %d for unsigned integer field %s", intval, f.field.Name))
-					}
-					intf.SetUint(intval)
-				}
-			case reflect.Bool:
-				{
-					if propValue.Type() != reflect.Bool {
-						panic(fmt.Sprintf("[config:struct:08] incorrect type for field %s (must be boolean)", f.field.Name))
-					}
-					boolval, ok := propValue.Value().(bool)
-					if !ok {
-						panic(fmt.Sprintf("[config:struct:09] incorrect type conversion for boolean field %s", f.field.Name))
-					}
-					f.parentStruct.FieldByName(f.field.Name).SetBool(boolval)
-				}
-			case reflect.String:
-				{
-					if propValue.Type() != reflect.String {
-						panic(fmt.Sprintf("[config:struct:10] incorrect type for field %s (must be string)", f.field.Name))
-					}
-					strval, ok := propValue.Value().(string)
-					if !ok {
-						panic(fmt.Sprintf("[config:struct:11] incorrect type conversion for string field %s", f.field.Name))
-					}
-					f.parentStruct.FieldByName(f.field.Name).SetString(strval)
-					f.fieldType = reflect.String
-				}
-			}
-		}
-	}
-}
-
-// Type simplification - converting types to the set of types used for configuration parameters in this package
-func typeSimplified(source reflect.Kind) reflect.Kind {
-	switch source {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		{
-			return reflect.Int64
-		}
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		{
-			return reflect.Uint64
-		}
-	case reflect.Float64, reflect.Float32:
-		{
-			return reflect.Float64
-		}
-	default:
-		{
-			return source
-		}
+		p := cm.add(tagValue, f.fieldType)
+		p.bindStructField(f)
 	}
 }
 
