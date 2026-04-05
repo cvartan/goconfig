@@ -1,6 +1,7 @@
 package goconfig
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -22,14 +23,6 @@ const (
 	initArrayLen
 )
 
-type Reader interface {
-	Read(source string) ([]byte, error)
-}
-
-type Parser interface {
-	Parse(data []byte) (map[string]any, error)
-}
-
 var parsers map[string]Parser
 
 func RegisterParser(format string, parser Parser) {
@@ -45,24 +38,32 @@ func RegisterParser(format string, parser Parser) {
 }
 
 type Options struct {
-	Path     string // Path to catalog with the configuration file
-	Source   string // Path to the configuration (may refer to non-file sources with custom readers)
-	Filename string // Filename of the configuration file
-	Format   string // Data format in the configuration (default supported formats: json, yaml or toml)
-	Reader   Reader // Custom configuration reader (see Reader interface)
-	Parser   Parser // Custom configuration parser (see Parser interface)
+	Path          string          // Path to catalog with the configuration file
+	Source        string          // Path to the configuration (may refer to non-file sources with custom readers)
+	Filename      string          // Filename of the configuration file
+	Format        string          // Data format in the configuration (default supported formats: json, yaml or toml)
+	Reader        Reader          // Custom configuration reader (see Reader interface)
+	ReaderOptions any             // Custom reader configuration (see used reader documentation)
+	ReaderTimeout int             // Reading timeout (in milliseconds)
+	Parser        Parser          // Custom configuration parser (see Parser interface)
+	ParserOptions any             // Custom parser configuration (see used parser documentation)
+	ParserTimeout int             // Parisng timeout (in millseconds)
+	Context       context.Context // Application context
 }
 
 // Main type for working with application configuration.
 // Contains methods for accessing configuration parameters
 type Configuration struct {
+	c configuration
+}
+
+type configuration struct {
 	mu         sync.Mutex
 	properties map[string]*Parameter
-	// bindedStructFields []*fieldListItem
-	reader  Reader
-	parser  Parser
-	source  string
-	envVars *envvar.EnvVariables
+	reader     Reader
+	parser     Parser
+	source     string
+	envVars    *envvar.EnvVariables
 }
 
 type fieldListItem struct {
@@ -154,15 +155,6 @@ var (
 	defaultFileSource string = *flag.String("config.source", "", "path to configuration sources")
 )
 
-// Type for configuration parameter
-type Parameter struct {
-	mu                 sync.Mutex
-	name               string
-	value              any
-	valueType          reflect.Kind
-	bindedStructFields []*fieldListItem
-}
-
 type ValueDataType int
 
 const (
@@ -194,140 +186,16 @@ func (t ValueDataType) Kind() reflect.Kind {
 	panic("[config:getType:001] unsupported data type")
 }
 
-// Get configuration parameter name
-func (p *Parameter) Name() string {
-	return p.name
-}
-
-// Get configuration parameter value
-func (p *Parameter) Value() any {
-	return p.value
-}
-
-// Get configuration parameter value type
-func (p *Parameter) Type() reflect.Kind {
-	return p.valueType
-}
-
-// Get an integer parameter value
-func (p *Parameter) Int() (value int64) {
-	switch p.Type() {
-	case reflect.Int64:
-		{
-			return p.value.(int64)
-		}
-	default:
-		{
-			panic("[parameter.int.01.] value of the parameter is not int64")
-		}
-	}
-}
-
-// Get a float64 parameter value
-func (p *Parameter) Float() (value float64) {
-	switch p.Type() {
-	case reflect.Int64:
-		{
-			return float64(p.value.(int64))
-		}
-	case reflect.Float64:
-		{
-			return p.value.(float64)
-		}
-	default:
-		{
-			panic("[parameter.float.01.] value of the parameter is not int64 or float64")
-		}
-	}
-}
-
-// Get a boolean parameter value
-func (p *Parameter) Bool() (value bool) {
-	switch p.Type() {
-	case reflect.Bool:
-		{
-			return p.value.(bool)
-		}
-	default:
-		{
-			panic("[parameter.bool.01.] value of the parameter is not boolean")
-		}
-	}
-}
-
-// Get a string parameter value
-func (p *Parameter) String() string {
-
-	switch p.Type() {
-	case reflect.Int64:
-		{
-			i := p.value.(int64)
-			return strconv.FormatInt(i, 10)
-		}
-	case reflect.Float64:
-		{
-			f := p.value.(float64)
-			return strconv.FormatFloat(f, 'g', -1, 64)
-		}
-	case reflect.Bool:
-		{
-			b := p.value.(bool)
-			return strconv.FormatBool(b)
-		}
-	case reflect.String:
-		{
-			return p.value.(string)
-		}
-	}
-
-	return fmt.Sprintf("%v", p.value)
-}
-
-func (p *Parameter) bindStructField(field *fieldListItem) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.bindedStructFields = append(p.bindedStructFields, field)
-	field.setValue(p)
-}
-
-func (p *Parameter) SetValue(value any) {
-	if value == nil {
-		// Pass nil value
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	switch t := utils.TypeSimplified(reflect.TypeOf(value).Kind()); t {
-	case reflect.Int64, reflect.Uint64, reflect.Float64, reflect.Bool, reflect.String:
-		{
-			tp := t
-			if tp == reflect.Uint64 {
-				tp = reflect.Int64
-			}
-
-			if p.Type() != tp {
-				panic(fmt.Sprintf("[config:set:03] incompatible data types between property %s and value", p.name))
-			}
-
-			p.value = value
-
-		}
-	default:
-		{
-			panic(fmt.Sprintf("[config:set:04] unsupported value type: %v", t))
-		}
-	}
-
-	// Set value for linked structure fields
-	for _, f := range p.bindedStructFields {
-		f.setValue(p)
-	}
-}
-
 func NewConfiguration(options *Options) *Configuration {
+
+	cm := &Configuration{}
+
+	cm.c.init(options)
+
+	return cm
+}
+
+func (cm *configuration) init(options *Options) {
 	opt := options
 
 	if options == nil {
@@ -366,23 +234,24 @@ func NewConfiguration(options *Options) *Configuration {
 		opt.Parser = parser
 	}
 
-	cm := &Configuration{
-		properties: make(map[string]*Parameter, initMapLen),
-		reader:     opt.Reader,
-		// bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
-		parser:  opt.Parser,
-		source:  opt.Source,
-		envVars: envvar.NewEnvVariables(),
-	}
+	cm.properties = make(map[string]*Parameter, initMapLen)
+	cm.reader = opt.Reader
+	cm.parser = opt.Parser
+	cm.source = opt.Source
+	cm.envVars = envvar.NewEnvVariables()
 
-	return cm
 }
 
 // Add or modify parameter value
-func (cm *Configuration) setParameterValue(key string, value any) {
-	if value == nil {
-		// Pass not defined configuration parameter
-		return
+func (cm *configuration) setParameterValue(key string, value any) {
+	v := value
+
+	if v == nil {
+		s := cm.envVars.GetValueForPropertyKey(key)
+		if s == "" {
+			return
+		}
+		v = utils.StringValueToTypedValue(s)
 	}
 
 	var (
@@ -393,20 +262,20 @@ func (cm *Configuration) setParameterValue(key string, value any) {
 	cv, ok = cm.properties[key]
 
 	if !ok {
-		cv = cm.add(key, utils.TypeSimplified(reflect.TypeOf(value).Kind()))
+		cv = cm.add(key, utils.TypeSimplified(reflect.TypeOf(v).Kind()))
 	}
 
-	cv.SetValue(value)
+	cv.SetValue(v)
 }
 
 // Add new parameter with nil value.
 // Value must be replaced by environment value if it defined.
 func (cm *Configuration) Add(key string, valueType ValueDataType) *Parameter {
 
-	return cm.add(key, valueType.Kind())
+	return cm.c.add(key, valueType.Kind())
 }
 
-func (cm *Configuration) add(key string, valueType reflect.Kind) *Parameter {
+func (cm *configuration) add(key string, valueType reflect.Kind) *Parameter {
 	if p, ok := cm.properties[key]; ok {
 		if p.valueType != valueType {
 			panic("[config:defParameter:001] parameter exists with incompatible data types")
@@ -437,11 +306,10 @@ func (cm *Configuration) Set(key string, value any) {
 		panic("[config:set:02] value is empty")
 	}
 
-	cm.setParameterValue(key, value)
+	cm.c.setParameterValue(key, value)
 }
 
-// Load and apply the configuration from source
-func (cm *Configuration) Apply() {
+func (cm *configuration) apply() {
 
 	if cm.reader == nil {
 		panic("[config:read:01] configuration reader is not defined")
@@ -474,8 +342,13 @@ func (cm *Configuration) Apply() {
 	}
 }
 
+// Load and apply the configuration from source
+func (cm *Configuration) Apply() {
+	cm.c.apply()
+}
+
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
-func (cm *Configuration) parseEnvPlaceholders(props map[string]any) {
+func (cm *configuration) parseEnvPlaceholders(props map[string]any) {
 	for k, v := range props {
 		switch str := v.(type) {
 		case string:
@@ -518,7 +391,7 @@ func extractPlaceholders(str string) (result []string) {
 	return
 }
 
-func (cm *Configuration) parseValuePlaceholder(str string) any {
+func (cm *configuration) parseValuePlaceholder(str string) any {
 	buf := strings.TrimFunc(
 		str,
 		func(r rune) bool {
@@ -618,7 +491,7 @@ func correctNumberValues(props map[string]any) {
 }
 
 // Replace property values if there is an environment variable in the corresponding format that defines a different value (e.g., for overriding properties from the configuration file when running the application in Docker)
-func (cm *Configuration) replaceByEnvValues(value *Parameter) {
+func (cm *configuration) replaceByEnvValues(value *Parameter) {
 
 	envVar := strings.ReplaceAll(value.name, ".", "_")
 	envVal := cm.envVars.GetValue(strings.ToUpper(envVar))
@@ -662,13 +535,13 @@ func (cm *Configuration) replaceByEnvValues(value *Parameter) {
 
 // Get a parameter value
 func (cm *Configuration) Get(key string) *Parameter {
-	return cm.properties[key]
+	return cm.c.properties[key]
 }
 
 // Get all parameters
 func (cm *Configuration) GetAll() (parameters []*Parameter) {
-	parameters = make([]*Parameter, 0, len(cm.properties))
-	for _, v := range cm.properties {
+	parameters = make([]*Parameter, 0, len(cm.c.properties))
+	for _, v := range cm.c.properties {
 		parameters = append(parameters, v)
 	}
 	return
@@ -676,8 +549,8 @@ func (cm *Configuration) GetAll() (parameters []*Parameter) {
 
 // Get parameters by prefix
 func (cm *Configuration) Lookup(filter string) (parameters []*Parameter) {
-	parameters = make([]*Parameter, 0, len(cm.properties))
-	for _, v := range cm.properties {
+	parameters = make([]*Parameter, 0, len(cm.c.properties))
+	for _, v := range cm.c.properties {
 		if strings.HasPrefix(v.Name(), strings.ToLower(filter)) {
 			parameters = append(parameters, v)
 		}
@@ -751,6 +624,10 @@ func (cm *Configuration) GetStringArray(key string) (values []string) {
 //
 // Parameter object must be pointer to struct
 func (cm *Configuration) Bind(object any) {
+	cm.c.bind(object)
+}
+
+func (cm *configuration) bind(object any) {
 	if object == nil {
 		panic("[config:bind:01] binded object must be defined")
 	}
@@ -761,6 +638,7 @@ func (cm *Configuration) Bind(object any) {
 
 	// Collect all fields, including those in nested structures
 	for _, f := range reflect.VisibleFields(c.Type()) {
+
 		switch f.Type.Kind() {
 		case reflect.Struct:
 			{
@@ -786,7 +664,7 @@ func (cm *Configuration) Bind(object any) {
 }
 
 // Getting fields of nested structure
-func (cm *Configuration) collectStructFields(structValue reflect.Value, structField reflect.StructField) {
+func (cm *configuration) collectStructFields(structValue reflect.Value, structField reflect.StructField) {
 	fields := reflect.VisibleFields(structField.Type)
 	for _, f := range fields {
 		switch f.Type.Kind() {
@@ -812,7 +690,7 @@ func (cm *Configuration) collectStructFields(structValue reflect.Value, structFi
 }
 
 // Check struct field for config tag and add field to list of bound fields for subsequent filling after configuration reading
-func (cm *Configuration) bindStructField(f *fieldListItem) {
+func (cm *configuration) bindStructField(f *fieldListItem) {
 	tagValue := f.field.Tag.Get("config")
 	if tagValue != "" {
 		// Check that existing property has same data type as struct attribute

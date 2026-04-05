@@ -314,3 +314,28 @@ func TestReadTomlConfig(t *testing.T) {
 	checkConfig(config, t)
 	checkStruct(obj, t)
 }
+
+type TestConfigurationStructure struct {
+	goconfig.StructuredConfiguration
+	TestConfig
+}
+
+func TestStructureConfiguration(t *testing.T) {
+	cfile, err := createJsonFile()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deleteFile(cfile)
+
+	addEnvVariables()
+
+	options := &goconfig.Options{
+		Filename: cfile,
+		Format:   "json",
+	}
+
+	obj := goconfig.InitStructuredConfiguration[TestConfigurationStructure](options)
+	obj.Apply()
+	checkStruct(&obj.TestConfig, t)
+}

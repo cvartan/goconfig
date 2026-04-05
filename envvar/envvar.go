@@ -108,3 +108,8 @@ func (e *EnvVariables) GetValueForType(key string, targetType reflect.Kind) any 
 		}
 	}
 }
+
+func (e *EnvVariables) GetValueForPropertyKey(key string) string {
+	envvar := strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+	return e.GetValue(envvar)
+}
