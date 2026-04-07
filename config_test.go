@@ -335,7 +335,7 @@ func TestStructureConfiguration(t *testing.T) {
 		Format:   "json",
 	}
 
-	obj := goconfig.InitStructuredConfiguration[TestConfigurationStructure](options)
+	obj := goconfig.NewStructuredConfiguration[TestConfigurationStructure](options)
 	obj.Apply()
 	checkStruct(&obj.TestConfig, t)
 }
