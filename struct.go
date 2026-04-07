@@ -15,7 +15,7 @@ func (s *StructuredConfiguration) Apply() {
 
 var nestedConfigType reflect.Type = reflect.ValueOf(StructuredConfiguration{}).Type()
 
-func InitStructuredConfiguration[T any](options *Options) *T {
+func NewStructuredConfiguration[T any](options *Options) *T {
 	holding := new(T)
 	holdingValue := reflect.ValueOf(holding).Elem()
 	holdingType := holdingValue.Type()
