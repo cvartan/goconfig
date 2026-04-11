@@ -1,7 +1,6 @@
 package goconfig
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -38,17 +37,12 @@ func RegisterParser(format string, parser Parser) {
 }
 
 type Options struct {
-	Path          string          // Path to catalog with the configuration file
-	Source        string          // Path to the configuration (may refer to non-file sources with custom readers)
-	Filename      string          // Filename of the configuration file
-	Format        string          // Data format in the configuration (default supported formats: json, yaml or toml)
-	Reader        Reader          // Custom configuration reader (see Reader interface)
-	ReaderOptions any             // Custom reader configuration (see used reader documentation)
-	ReaderTimeout int             // Reading timeout (in milliseconds)
-	Parser        Parser          // Custom configuration parser (see Parser interface)
-	ParserOptions any             // Custom parser configuration (see used parser documentation)
-	ParserTimeout int             // Parisng timeout (in millseconds)
-	Context       context.Context // Application context
+	Path     string // Path to catalog with the configuration file
+	Source   string // Path to the configuration (may refer to non-file sources with custom readers)
+	Filename string // Filename of the configuration file
+	Format   string // Data format in the configuration (default supported formats: json, yaml or toml)
+	Reader   Reader // Custom configuration reader (see Reader interface)
+	Parser   Parser // Custom configuration parser (see Parser interface)
 }
 
 // Main type for working with application configuration.
@@ -636,41 +630,18 @@ func (cm *configuration) bind(object any) {
 		panic("[config:bind:02] binded object is not struct")
 	}
 
-	// Collect all fields, including those in nested structures
-	for _, f := range reflect.VisibleFields(c.Type()) {
+	cm.collectStructFields(c, c.Type())
 
-		switch f.Type.Kind() {
-		case reflect.Struct:
-			{
-				cm.collectStructFields(c.FieldByName(f.Name), f)
-			}
-		case reflect.Array, reflect.Slice:
-			{
-				// TODO: apparently someday we need to figure out how to work with arrays in struct attributes
-				continue
-			}
-		case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			{
-				cm.bindStructField(
-					&fieldListItem{
-						parentStruct: c,
-						field:        f,
-						fieldType:    utils.TypeSimplified(f.Type.Kind()),
-					},
-				)
-			}
-		}
-	}
 }
 
 // Getting fields of nested structure
-func (cm *configuration) collectStructFields(structValue reflect.Value, structField reflect.StructField) {
-	fields := reflect.VisibleFields(structField.Type)
+func (cm *configuration) collectStructFields(structValue reflect.Value, structFieldType reflect.Type) {
+	fields := reflect.VisibleFields(structFieldType)
 	for _, f := range fields {
 		switch f.Type.Kind() {
 		case reflect.Struct:
 			{
-				cm.collectStructFields(structValue.FieldByName(f.Name), f)
+				cm.collectStructFields(structValue.FieldByName(f.Name), f.Type)
 			}
 		case reflect.Array, reflect.Slice:
 			{

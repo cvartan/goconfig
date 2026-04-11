@@ -18,19 +18,26 @@ var nestedConfigType reflect.Type = reflect.ValueOf(StructuredConfiguration{}).T
 func NewStructuredConfiguration[T any](options *Options) *T {
 	holding := new(T)
 	holdingValue := reflect.ValueOf(holding).Elem()
-	holdingType := holdingValue.Type()
 
-	for i := 0; i < holdingType.NumField(); i++ {
-		f := holdingType.Field(i)
-		if f.Anonymous && f.Type == nestedConfigType {
-			conf := &configuration{}
-			conf.init(options)
-			conf.bind(holding)
+	if i, ok := checkStructuredConfiguration(holding); ok {
+		conf := &configuration{}
+		conf.init(options)
+		conf.bind(holding)
 
-			holdingValue.Field(i).Field(0).Set(reflect.ValueOf(conf))
-			return holding
-		}
+		holdingValue.Field(i).Field(0).Set(reflect.ValueOf(conf))
+		return holding
 	}
 
 	return nil
+}
+
+func checkStructuredConfiguration(obj any) (int, bool) {
+	objType := reflect.ValueOf(obj).Elem().Type()
+	for i := 0; i < objType.NumField(); i++ {
+		f := objType.Field(i)
+		if f.Anonymous && f.Type == nestedConfigType {
+			return i, true
+		}
+	}
+	return -1, false
 }

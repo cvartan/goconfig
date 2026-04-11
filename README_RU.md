@@ -87,7 +87,6 @@ type Options struct {
     Format        string          // Формат представления данных в конфигурации (по умолчанию доступны: json, yaml или toml)
     Reader        Reader          // Пользовательский читатель конфигурации (см. интерфейс Reader)
     Parser        Parser          // Пользовательский парсер конфигурации (см. интерфейс Parser)
-    Context       context.Context // Контекст приложения
 }
 ```
 

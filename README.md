@@ -84,7 +84,6 @@ type Options struct {
     Format        string          // Data format in the configuration (default supported formats: json, yaml or toml)
     Reader        Reader          // Custom configuration reader (see Reader interface)
     Parser        Parser          // Custom configuration parser (see Parser interface)
-    Context       context.Context // Application context
 }
 ```
 
