@@ -277,7 +277,7 @@ func main() {
 
 ### Method 2: Using StructuredConfiguration
 
-Create a struct that embeds `goconfig.StructuredConfiguration`, then initialize it with `InitStructuredConfiguration`:
+Create a struct that embeds `goconfig.StructuredConfiguration`, then initialize it with `NewStructuredConfiguration`:
 
 ```go
 package main

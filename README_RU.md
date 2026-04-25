@@ -280,7 +280,7 @@ func main() {
 
 ### Способ 2: Использование StructuredConfiguration
 
-Создайте структуру, которая включает `goconfig.StructuredConfiguration`, затем инициализируйте её с помощью `InitStructuredConfiguration`:
+Создайте структуру, которая включает `goconfig.StructuredConfiguration`, затем инициализируйте её с помощью `NewStructuredConfiguration`:
 
 ```go
 package main

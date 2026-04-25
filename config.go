@@ -186,6 +186,8 @@ func NewConfiguration(options *Options) *Configuration {
 
 	cm.c.init(options)
 
+	cm.c.apply()
+
 	return cm
 }
 
