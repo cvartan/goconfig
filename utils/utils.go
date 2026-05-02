@@ -49,7 +49,7 @@ func StringValueToTypedValue(value string) any {
 
 	//Check int64
 	if iv, err := strconv.Atoi(value); err == nil {
-		return iv
+		return int64(iv)
 	}
 
 	//Check float64
