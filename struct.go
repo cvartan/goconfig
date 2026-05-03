@@ -1,6 +1,12 @@
 package goconfig
 
-import "reflect"
+import (
+	"errors"
+	"fmt"
+	"reflect"
+
+	"github.com/cvartan/goconfig/types"
+)
 
 type StructuredConfiguration struct {
 	C *configuration // Configuration
@@ -23,6 +29,10 @@ func NewStructuredConfiguration[T any](options *Options) *T {
 		conf := &configuration{}
 		conf.init(options)
 		conf.bind(holding)
+		err := conf.apply()
+		if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+			panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
+		}
 
 		holdingValue.Field(i).Field(0).Set(reflect.ValueOf(conf))
 		return holding

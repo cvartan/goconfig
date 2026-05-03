@@ -336,6 +336,14 @@ func TestStructureConfiguration(t *testing.T) {
 	}
 
 	obj := goconfig.NewStructuredConfiguration[TestConfigurationStructure](options)
-	obj.Apply()
+	//obj.Apply()
 	checkStruct(&obj.TestConfig, t)
+}
+
+func TestReadConfigurationSourceError(t *testing.T) {
+	options := &goconfig.Options{
+		Source: "nofile.json",
+	}
+
+	goconfig.NewConfiguration(options)
 }
