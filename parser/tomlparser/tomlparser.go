@@ -2,6 +2,7 @@ package tomlparser
 
 import (
 	"github.com/cvartan/goconfig/mapconv"
+	"github.com/cvartan/goconfig/types"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -12,7 +13,7 @@ func (r *TomlConfigurationParser) Parse(data []byte) (props map[string]any, err 
 	var propertySource map[string]any
 	err = toml.Unmarshal(data, &propertySource)
 	if err != nil {
-		return
+		return nil, types.NewParseConfigurationDataError(err, "json")
 	}
 
 	props = mapconv.ParseMapToPropertyMap(propertySource)

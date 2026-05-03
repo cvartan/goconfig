@@ -1,6 +1,7 @@
 package goconfig
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/cvartan/goconfig/parser/tomlparser"
 	"github.com/cvartan/goconfig/parser/yamlparser"
 	"github.com/cvartan/goconfig/reader/filereader"
+	"github.com/cvartan/goconfig/types"
 	"github.com/cvartan/goconfig/utils"
 )
 
@@ -22,27 +24,13 @@ const (
 	initArrayLen
 )
 
-var parsers map[string]Parser
-
-func RegisterParser(format string, parser Parser) {
-	if format == "" {
-		panic("[config:reg:01] format must be defined")
-	}
-
-	if parser == nil {
-		panic("[config:reg:02] parser must be defined")
-	}
-
-	parsers[format] = parser
-}
-
 type Options struct {
-	Path     string // Path to catalog with the configuration file
-	Source   string // Path to the configuration (may refer to non-file sources with custom readers)
-	Filename string // Filename of the configuration file
-	Format   string // Data format in the configuration (default supported formats: json, yaml or toml)
-	Reader   Reader // Custom configuration reader (see Reader interface)
-	Parser   Parser // Custom configuration parser (see Parser interface)
+	Path     string       // Path to catalog with the configuration file
+	Source   string       // Path to the configuration (may refer to non-file sources with custom readers)
+	Filename string       // Filename of the configuration file
+	Format   string       // Data format in the configuration (default supported formats: json, yaml or toml)
+	Reader   types.Reader // Custom configuration reader (see Reader interface)
+	Parser   types.Parser // Custom configuration parser (see Parser interface)
 }
 
 // Main type for working with application configuration.
@@ -54,8 +42,8 @@ type Configuration struct {
 type configuration struct {
 	mu         sync.Mutex
 	properties map[string]*Parameter
-	reader     Reader
-	parser     Parser
+	reader     types.Reader
+	parser     types.Parser
 	source     string
 	envVars    *envvar.EnvVariables
 }
@@ -186,7 +174,10 @@ func NewConfiguration(options *Options) *Configuration {
 
 	cm.c.init(options)
 
-	cm.c.apply()
+	err := cm.c.apply()
+	if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+		panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
+	}
 
 	return cm
 }
@@ -223,9 +214,9 @@ func (cm *configuration) init(options *Options) {
 	}
 
 	if opt.Parser == nil {
-		parser, ok := parsers[strings.ToLower(opt.Format)]
+		parser, ok := types.GetParserByFormat(strings.ToLower(opt.Format))
 		if !ok {
-			panic("[config:new:01] reader for this format is not defined")
+			panic("[config:new:01] parser for this format is not defined")
 		}
 		opt.Parser = parser
 	}
@@ -305,7 +296,7 @@ func (cm *Configuration) Set(key string, value any) {
 	cm.c.setParameterValue(key, value)
 }
 
-func (cm *configuration) apply() {
+func (cm *configuration) apply() error {
 
 	if cm.reader == nil {
 		panic("[config:read:01] configuration reader is not defined")
@@ -317,12 +308,12 @@ func (cm *configuration) apply() {
 
 	fs, err := cm.reader.Read(cm.source)
 	if err != nil {
-		panic(fmt.Sprintf("[config:read:02] can't read configuration by error: %s", err))
+		return err
 	}
 
 	props, err := cm.parser.Parse(fs)
 	if err != nil {
-		panic(fmt.Sprintf("[config:read:05] can't parse configuration by error: %s", err))
+		return err
 	}
 
 	// Set property values written as references to environment variables
@@ -336,11 +327,13 @@ func (cm *configuration) apply() {
 	for k, v := range props {
 		cm.setParameterValue(k, v)
 	}
+
+	return nil
 }
 
 // Load and apply the configuration from source
-func (cm *Configuration) Apply() {
-	cm.c.apply()
+func (cm *Configuration) Apply() error {
+	return cm.c.apply()
 }
 
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
@@ -679,8 +672,8 @@ func (cm *configuration) bindStructField(f *fieldListItem) {
 }
 
 func init() {
-	parsers = make(map[string]Parser, 3)
-	RegisterParser("json", &jsonparser.JsonConfigurationParser{})
-	RegisterParser("yaml", &yamlparser.YamlConfigurationParser{})
-	RegisterParser("toml", &tomlparser.TomlConfigurationParser{})
+
+	types.RegisterParser("json", &jsonparser.JsonConfigurationParser{})
+	types.RegisterParser("yaml", &yamlparser.YamlConfigurationParser{})
+	types.RegisterParser("toml", &tomlparser.TomlConfigurationParser{})
 }

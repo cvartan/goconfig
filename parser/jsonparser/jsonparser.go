@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cvartan/goconfig/mapconv"
+	"github.com/cvartan/goconfig/types"
 )
 
 type JsonConfigurationParser struct {
@@ -20,7 +21,7 @@ func (r *JsonConfigurationParser) Parse(data []byte) (props map[string]any, err 
 	var propertySource map[string]any
 	err = decoder.Decode(&propertySource)
 	if err != nil {
-		return
+		return nil, types.NewParseConfigurationDataError(err, "json")
 	}
 
 	props = mapconv.ParseMapToPropertyMap(propertySource)

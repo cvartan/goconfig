@@ -2,6 +2,7 @@ package yamlparser
 
 import (
 	"github.com/cvartan/goconfig/mapconv"
+	"github.com/cvartan/goconfig/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -13,7 +14,7 @@ func (r *YamlConfigurationParser) Parse(data []byte) (props map[string]any, err 
 	err = yaml.Unmarshal(data, &propertySource)
 
 	if err != nil {
-		return
+		return nil, types.NewParseConfigurationDataError(err, "json")
 	}
 
 	props = mapconv.ParseMapToPropertyMap(propertySource)
