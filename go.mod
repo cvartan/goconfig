@@ -12,3 +12,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.11.1
 )
+
+retract (
+	v1.1.1
+)
