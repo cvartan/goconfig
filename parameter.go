@@ -33,6 +33,11 @@ func (p *Parameter) Type() reflect.Kind {
 	return p.valueType
 }
 
+// Check configuration parameter is nil
+func (p *Parameter) IsNil() bool {
+	return p.value == nil
+}
+
 // Get an integer parameter value
 func (p *Parameter) Int() (value int64) {
 	switch p.Type() {
