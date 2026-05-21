@@ -221,12 +221,16 @@ func (cm *configuration) init(options *Options) {
 		opt.Parser = parser
 	}
 
-	cm.properties = make(map[string]*Parameter, initMapLen)
+	if cm.properties == nil {
+		cm.properties = make(map[string]*Parameter, initMapLen)
+	}
 	cm.reader = opt.Reader
 	cm.parser = opt.Parser
 	cm.source = opt.Source
-	cm.envVars = envvar.NewEnvVariables()
 
+	if cm.envVars == nil {
+		cm.envVars = envvar.NewEnvVariables()
+	}
 }
 
 // Add or modify parameter value
@@ -668,6 +672,14 @@ func (cm *configuration) bindStructField(f *fieldListItem) {
 		// Add new property
 		p := cm.add(tagValue, f.fieldType)
 		p.bindStructField(f)
+	}
+}
+
+// Init configuration with options (if in NewConfiguration functions options was nil)
+func (cm *Configuration) Init(options Options) {
+	cm.c.init(&options)
+	if err := cm.c.apply(); err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+		panic(fmt.Sprintf("can't init configuration manager with error:\n%v", err))
 	}
 }
 

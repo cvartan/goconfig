@@ -347,3 +347,44 @@ func TestReadConfigurationSourceError(t *testing.T) {
 
 	goconfig.NewConfiguration(options)
 }
+
+func TestConfigurationReinit(t *testing.T) {
+	c := goconfig.NewConfiguration(nil)
+
+	c.Set("reinit.test_str", "test")
+	c.Set("reinit.test_int", 100)
+	c.Set("reinit.test_float", 100.00)
+
+	cfile, err := createYamlFile()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deleteFile(cfile)
+
+	options := &goconfig.Options{
+		Filename: cfile,
+		Format:   "yaml",
+	}
+
+	c.Init(*options)
+
+	p1 := c.Get("reinit.test_str")
+	assert.NotNil(t, p1)
+	if p1 != nil {
+		assert.Equal(t, "test", p1.String())
+	}
+
+	p2 := c.Get("reinit.test_int")
+	assert.NotNil(t, p2)
+	if p2 != nil {
+		assert.Equal(t, int64(100), p2.Int())
+	}
+
+	p3 := c.Get("reinit.test_float")
+	assert.NotNil(t, p3)
+	if p3 != nil {
+		assert.Equal(t, float64(100.00), p3.Float())
+	}
+
+}

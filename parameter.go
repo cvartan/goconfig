@@ -141,7 +141,25 @@ func (p *Parameter) SetValue(value any) {
 				panic(fmt.Sprintf("[config:set:03] incompatible data types between property %s and value", p.name))
 			}
 
-			p.value = value
+			switch tp {
+			case reflect.Int64:
+				{
+					p.value = utils.AnyToInt64(value)
+				}
+			case reflect.Float64:
+				{
+					p.value = utils.AnyToFloat64(value)
+				}
+			case reflect.Bool:
+				{
+					p.value = value.(bool)
+
+				}
+			case reflect.String:
+				{
+					p.value = value.(string)
+				}
+			}
 
 		}
 	default:
