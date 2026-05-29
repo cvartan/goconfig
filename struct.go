@@ -28,7 +28,7 @@ func NewStructuredConfiguration[T any](options *Options) *T {
 	if i, ok := checkStructuredConfiguration(holding); ok {
 		conf := &configuration{}
 		conf.init(options)
-		conf.bind(holding)
+		conf.bind(holding, "")
 		err := conf.apply()
 		if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
 			panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))

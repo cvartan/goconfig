@@ -617,30 +617,39 @@ func (cm *Configuration) GetStringArray(key string) (values []string) {
 //
 // Parameter object must be pointer to struct
 func (cm *Configuration) Bind(object any) {
-	cm.c.bind(object)
+	cm.c.bind(object, "")
 }
 
-func (cm *configuration) bind(object any) {
+func (cm *Configuration) BindFrom(object any, prefix string) {
+	cm.c.bind(object, prefix)
+}
+
+func (cm *configuration) bind(object any, prefix string) {
 	if object == nil {
 		panic("[config:bind:01] binded object must be defined")
 	}
+
+	if prefix != "" && !strings.HasSuffix(strings.TrimSpace(prefix), ".") {
+		prefix = prefix + "."
+	}
+
 	c := reflect.ValueOf(object).Elem()
 	if c.Type().Kind() != reflect.Struct {
 		panic("[config:bind:02] binded object is not struct")
 	}
 
-	cm.collectStructFields(c, c.Type())
+	cm.collectStructFields(c, c.Type(), prefix)
 
 }
 
 // Getting fields of nested structure
-func (cm *configuration) collectStructFields(structValue reflect.Value, structFieldType reflect.Type) {
+func (cm *configuration) collectStructFields(structValue reflect.Value, structFieldType reflect.Type, prefix string) {
 	fields := reflect.VisibleFields(structFieldType)
 	for _, f := range fields {
 		switch f.Type.Kind() {
 		case reflect.Struct:
 			{
-				cm.collectStructFields(structValue.FieldByName(f.Name), f.Type)
+				cm.collectStructFields(structValue.FieldByName(f.Name), f.Type, prefix)
 			}
 		case reflect.Array, reflect.Slice:
 			{
@@ -653,15 +662,15 @@ func (cm *configuration) collectStructFields(structValue reflect.Value, structFi
 					parentStruct: structValue,
 					field:        f,
 					fieldType:    utils.TypeSimplified(f.Type.Kind()),
-				})
+				}, prefix)
 			}
 		}
 	}
 }
 
 // Check struct field for config tag and add field to list of bound fields for subsequent filling after configuration reading
-func (cm *configuration) bindStructField(f *fieldListItem) {
-	tagValue := f.field.Tag.Get("config")
+func (cm *configuration) bindStructField(f *fieldListItem, prefix string) {
+	tagValue := prefix + f.field.Tag.Get("config")
 	if tagValue != "" {
 		// Check that existing property has same data type as struct attribute
 		if p, ok := cm.properties[tagValue]; ok {

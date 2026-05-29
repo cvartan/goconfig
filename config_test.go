@@ -28,6 +28,13 @@ type TestConfig struct {
 	}
 }
 
+type TestConfig2 struct {
+	IntAttr    int     `config:"test_int"`
+	FloatAttr  float64 `config:"test_float"`
+	BoolAttr   bool    `config:"test_bool"`
+	StringAttr string  `config:"test_str"`
+}
+
 var jsonConfig string = `
 {
     "test":{
@@ -387,4 +394,31 @@ func TestConfigurationReinit(t *testing.T) {
 		assert.Equal(t, float64(100.00), p3.Float())
 	}
 
+}
+
+func TestRelativeConfigurationTag(t *testing.T) {
+	cfile, err := createJsonFile()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deleteFile(cfile)
+
+	addEnvVariables()
+
+	options := &goconfig.Options{
+		Filename: cfile,
+		Format:   "json",
+	}
+
+	config := goconfig.NewConfiguration(options)
+
+	ts := &TestConfig2{}
+
+	config.BindFrom(ts, "test")
+
+	assert.Equal(t, 100, ts.IntAttr)
+	assert.Equal(t, 100.00, ts.FloatAttr)
+	assert.Equal(t, true, ts.BoolAttr)
+	assert.Equal(t, "test string", ts.StringAttr)
 }

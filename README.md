@@ -153,6 +153,8 @@ Creates a new configuration manager with the specified options. Pass `nil` to us
 | `GetAll() []*Parameter` | Get all parameters |
 | `Lookup(filter string) []*Parameter` | Get an array of parameters by prefix |
 | `Bind(object any)` | Bind a struct to the configuration |
+| `BindFrom(object any, prefix string)` | Bind a struct to the configuration with relative path in tags.|
+| | Prefix set root parameter for tag value |
 | `GetArrayValues(key string) []any` | Get array parameter values |
 | `GetIntArray(key string) []int64` | Get values for an integer array parameter |
 | `GetFloatArray(key string) []float64` | Get values for a floating-point array parameter |
@@ -274,6 +276,8 @@ func main() {
     config.Apply() // Read configuration from file and apply parameter values to bound struct attributes
 }
 ```
+
+If the path to a parameter specified in the value of the config tag is not relative to the configuration root (for example, the configuration contains a separate section used for a structure that may vary from application to application), then in this case it is recommended to use the BindFrom method, which allows you to set a starting prefix — the point from which the configuration for the structure should be read.
 
 ### Method 2: Using StructuredConfiguration
 
