@@ -40,12 +40,11 @@ type Configuration struct {
 }
 
 type configuration struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	properties map[string]*Parameter
 	reader     types.Reader
 	parser     types.Parser
 	source     string
-	envVars    *envvar.EnvVariables
 }
 
 type fieldListItem struct {
@@ -183,6 +182,9 @@ func NewConfiguration(options *Options) *Configuration {
 }
 
 func (cm *configuration) init(options *Options) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	opt := options
 
 	if options == nil {
@@ -228,17 +230,17 @@ func (cm *configuration) init(options *Options) {
 	cm.parser = opt.Parser
 	cm.source = opt.Source
 
-	if cm.envVars == nil {
-		cm.envVars = envvar.NewEnvVariables()
-	}
 }
 
 // Add or modify parameter value
 func (cm *configuration) setParameterValue(key string, value any) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	v := value
 
 	if v == nil {
-		s := cm.envVars.GetValueForPropertyKey(key)
+		s := envvar.EnvironmentVariables.GetValueForPropertyKey(key)
 		if s == "" {
 			return
 		}
@@ -262,11 +264,13 @@ func (cm *configuration) setParameterValue(key string, value any) {
 // Add new parameter with nil value.
 // Value must be replaced by environment value if it defined.
 func (cm *Configuration) Add(key string, valueType ValueDataType) *Parameter {
-
 	return cm.c.add(key, valueType.Kind())
 }
 
 func (cm *configuration) add(key string, valueType reflect.Kind) *Parameter {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	if p, ok := cm.properties[key]; ok {
 		if p.valueType != valueType {
 			panic("[config:defParameter:001] parameter exists with incompatible data types")
@@ -281,7 +285,7 @@ func (cm *configuration) add(key string, valueType reflect.Kind) *Parameter {
 		bindedStructFields: make([]*fieldListItem, 0, initArrayLen),
 	}
 
-	cm.replaceByEnvValues(p)
+	replaceByEnvValues(p)
 
 	cm.properties[key] = p
 
@@ -321,7 +325,7 @@ func (cm *configuration) apply() error {
 	}
 
 	// Set property values written as references to environment variables
-	cm.parseEnvPlaceholders(props)
+	parseEnvPlaceholders(props)
 
 	// Perform correction of numeric values - converting them to int64 or float64 types
 	// For the case when all numeric values are converted to one type when reading from the configuration source (e.g., to float64 during JSON deserialization), the correct type is determined by value during reading (reader's Read method).
@@ -341,7 +345,7 @@ func (cm *Configuration) Apply() error {
 }
 
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
-func (cm *configuration) parseEnvPlaceholders(props map[string]any) {
+func parseEnvPlaceholders(props map[string]any) {
 	for k, v := range props {
 		switch str := v.(type) {
 		case string:
@@ -349,13 +353,13 @@ func (cm *configuration) parseEnvPlaceholders(props map[string]any) {
 				pc := strings.Count(str, "${")
 				if pc > 0 {
 					if pc == 1 && strings.HasPrefix(str, "${") && strings.HasSuffix(str, "}") {
-						props[k] = cm.parseValuePlaceholder(str)
+						props[k] = parseValuePlaceholder(str)
 						continue
 					}
 
 					values := extractPlaceholders(str)
 					for _, v := range values {
-						value := cm.parseValuePlaceholder(v)
+						value := parseValuePlaceholder(v)
 						str = strings.Replace(str, "${"+v+"}", fmt.Sprintf("%v", value), 1)
 					}
 
@@ -384,7 +388,7 @@ func extractPlaceholders(str string) (result []string) {
 	return
 }
 
-func (cm *configuration) parseValuePlaceholder(str string) any {
+func parseValuePlaceholder(str string) any {
 	buf := strings.TrimFunc(
 		str,
 		func(r rune) bool {
@@ -411,7 +415,7 @@ func (cm *configuration) parseValuePlaceholder(str string) any {
 		defValue = parts[1]
 	}
 
-	paramValue := cm.envVars.GetValue(strings.ToUpper(envValue))
+	paramValue := envvar.EnvironmentVariables.GetValue(strings.ToUpper(envValue))
 	if paramValue == "" {
 		paramValue = defValue
 	}
@@ -484,10 +488,10 @@ func correctNumberValues(props map[string]any) {
 }
 
 // Replace property values if there is an environment variable in the corresponding format that defines a different value (e.g., for overriding properties from the configuration file when running the application in Docker)
-func (cm *configuration) replaceByEnvValues(value *Parameter) {
+func replaceByEnvValues(value *Parameter) {
 
 	envVar := strings.ReplaceAll(value.name, ".", "_")
-	envVal := cm.envVars.GetValue(strings.ToUpper(envVar))
+	envVal := envvar.EnvironmentVariables.GetValue(strings.ToUpper(envVar))
 	if envVal != "" {
 		switch value.Type() {
 		case reflect.Int64:
@@ -528,11 +532,15 @@ func (cm *configuration) replaceByEnvValues(value *Parameter) {
 
 // Get a parameter value
 func (cm *Configuration) Get(key string) *Parameter {
+	cm.c.mu.Lock()
+	defer cm.c.mu.Unlock()
 	return cm.c.properties[key]
 }
 
 // Get all parameters
 func (cm *Configuration) GetAll() (parameters []*Parameter) {
+	cm.c.mu.Lock()
+	defer cm.c.mu.Unlock()
 	parameters = make([]*Parameter, 0, len(cm.c.properties))
 	for _, v := range cm.c.properties {
 		parameters = append(parameters, v)
@@ -542,6 +550,8 @@ func (cm *Configuration) GetAll() (parameters []*Parameter) {
 
 // Get parameters by prefix
 func (cm *Configuration) Lookup(filter string) (parameters []*Parameter) {
+	cm.c.mu.Lock()
+	defer cm.c.mu.Unlock()
 	parameters = make([]*Parameter, 0, len(cm.c.properties))
 	for _, v := range cm.c.properties {
 		if strings.HasPrefix(v.Name(), strings.ToLower(filter)) {
@@ -637,6 +647,8 @@ func (cm *configuration) bind(object any, prefix string) {
 	if c.Type().Kind() != reflect.Struct {
 		panic("[config:bind:02] binded object is not struct")
 	}
+
+	
 
 	cm.collectStructFields(c, c.Type(), prefix)
 

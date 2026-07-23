@@ -7,16 +7,20 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cvartan/goconfig/utils"
 )
 
-type EnvVariables struct {
+var EnvironmentVariables *envVariables
+
+type envVariables struct {
+	mu          *sync.RWMutex
 	envFileVars map[string]string
 }
 
-func NewEnvVariables() *EnvVariables {
-	e := &EnvVariables{
+func NewEnvVariables() *envVariables {
+	e := &envVariables{
 		envFileVars: make(map[string]string),
 	}
 
@@ -56,11 +60,15 @@ func NewEnvVariables() *EnvVariables {
 	return e
 }
 
-func (e *EnvVariables) GetValue(key string) string {
+func (e *envVariables) GetValue(key string) string {
+
 	// First check OS environment variable
 	if val := os.Getenv(key); val != "" {
 		return val
 	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 
 	// Fallback to .env file value
 	if e.envFileVars != nil {
@@ -72,7 +80,7 @@ func (e *EnvVariables) GetValue(key string) string {
 	return ""
 }
 
-func (e *EnvVariables) GetValueForType(key string, targetType reflect.Kind) any {
+func (e *envVariables) GetValueForType(key string, targetType reflect.Kind) any {
 	v := e.GetValue(key)
 	if v == "" {
 		return nil
@@ -109,7 +117,11 @@ func (e *EnvVariables) GetValueForType(key string, targetType reflect.Kind) any 
 	}
 }
 
-func (e *EnvVariables) GetValueForPropertyKey(key string) string {
+func (e *envVariables) GetValueForPropertyKey(key string) string {
 	envvar := strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
 	return e.GetValue(envvar)
+}
+
+func init() {
+	EnvironmentVariables = NewEnvVariables()
 }
