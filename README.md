@@ -1,11 +1,11 @@
 # go-config
 
-`go-config` — a lightweight Go package for accessing and managing application configuration.
+`go-config` is a lightweight Go package for accessing and managing application configuration.
 
 Configuration values are loaded from the following sources (in order of priority):
 
 1. Configuration files (JSON, YAML, TOML)
-2. Environment variables (OS environment variables take precedence)
+2. OS environment variables (take precedence)
 3. `.env` file (automatically loaded from the application's working directory)
 
 Automatic binding of configuration values to exported struct fields is supported.
@@ -25,23 +25,25 @@ Automatic binding of configuration values to exported struct fields is supported
 ---
 
 ## Installation
+
 ```bash
 go get github.com/cvartan/goconfig
 ```
+
 ---
 
 ## Configuration File Requirements
 
 ### General
 
-- Supported value types: `string`, `bool`, numeric types (stored as `int64` or `float64`)
+- Supported value types: `string`, `bool`, numeric types (converted to `int64` or `float64` when stored)
 - Values of unsupported types are ignored
-- Environment variable references can be used as values: `${ENV_VARIABLE:DEFAULT_VALUE}`
+- An environment variable reference can be used as a value: `${ENV_VARIABLE:DEFAULT_VALUE}`
 
 The value type is determined either by the environment variable or by the default value.
-The default value may be omitted (format `${ENV_VARIABLE}`).
+The default value may be omitted (in this case the format is `${ENV_VARIABLE}`).
 
-If a parameter's value is a string, variable substitution within the value is allowed:
+If a parameter's value is a string, variable substitution inside the string is supported:
 ```json
 {
     "url": "${SRV_PROTOCOL:https}://${SRV_NAME}:${SRV_PORT:443}/api"
@@ -50,7 +52,7 @@ If a parameter's value is a string, variable substitution within the value is al
 
 ### `.env` File Support
 
-The library automatically loads environment variables from a `.env` file in the application's working directory (if present).
+The library automatically loads environment variables from a `.env` file in the application's working directory (if it exists).
 
 Format:
 ```
@@ -62,12 +64,12 @@ DEBUG=true
 
 - OS environment variables take precedence over `.env` file values
 - The `.env` file is optional and silently ignored if not found
-- Supports `KEY=VALUE` format with optional quotes
+- The `KEY=VALUE` format with optional quotes is supported
 
 ### JSON and YAML
 
 - The root element must be an object
-- Arrays as root elements are not supported
+- Using an array as the root element is not supported
 
 ---
 
@@ -76,14 +78,15 @@ DEBUG=true
 ### Configuration Options
 
 The `Options` struct is used to configure the configuration manager:
+
 ```go
 type Options struct {
-    Path          string          // Path to catalog with the configuration file
-    Source        string          // Path to the configuration (may refer to non-file sources with custom readers)
-    Filename      string          // Filename of the configuration file
-    Format        string          // Data format in the configuration (default supported formats: json, yaml or toml)
-    Reader        Reader          // Custom configuration reader (see Reader interface)
-    Parser        Parser          // Custom configuration parser (see Parser interface)
+    Path          string          // Path to the directory containing the configuration file
+    Source        string          // Path to the configuration (when adding custom readers, the path may refer not only to a file)
+    Filename      string          // Name of the configuration file
+    Format        string          // Data format of the configuration (built-in formats: json, yaml or toml)
+    Reader        Reader          // Custom configuration reader (see the Reader interface)
+    Parser        Parser          // Custom configuration parser (see the Parser interface)
 }
 ```
 
@@ -103,10 +106,10 @@ The configuration file can be specified in one of the following ways:
 2. **Statically** — via options when creating the configuration
 3. **Dynamically** — via application flags:
 
-- `-config.path=/opt/app/config`
-- `-config.filename=config.yml`
-- `-config.format=yaml`
-- `-config.source=/opt/app/config/config.yml` (if this parameter is specified, `config.path` and `config.filename` are ignored)
+- `-config.path=/opt/app/config` — sets the path to the directory with the configuration file (must not end with a "/" separator)
+- `-config.filename=config.yml` — sets the name of the configuration file
+- `-config.format=yaml` — sets the format of the configuration content
+- `-config.source=/opt/app/config/config.yml` — sets the full path to the configuration file (when this flag is specified, the `config.path` and `config.filename` flags are not used) or another location of the configuration data, for example, the URL of an API method that returns the configuration data (in this case, a custom reader implementation is required)
 
 ---
 
@@ -118,10 +121,9 @@ Three parsers are available (registered by default):
 - YAML parser (for `Format = "yaml"`)
 - TOML parser (for `Format = "toml"`)
 
-You can also create a custom parser (implement the `Parser` interface) and register it via `RegisterParser(format string, parser Parser)`.
+You can create a custom parser (implement the `Parser` interface) and register it using the `RegisterParser(format string, parser Parser)` method.
 
 ---
-
 ## Exported Types and Interfaces
 
 ### Configuration
@@ -140,57 +142,58 @@ type Configuration struct {
 func NewConfiguration(options *Options) *Configuration
 ```
 
-Creates a new configuration manager with the specified options. Pass `nil` to use default options.
-Before use the configuration use Apply().
+Creates a new configuration manager with the specified options. Pass `nil` to use the default options.
+However, before using the configuration, you must call the `Apply()` method.
 
 #### Methods
 
 | Method | Description |
-|--------|-------------|
-| `Apply()` | Load and apply the configuration from source |
-| `Add(key string, valueType ValueDataType) *Parameter` | Add a new parameter without a value |
-| `Set(key string, value any)` | Set a parameter value (or add it if missing) |
-| `Get(key string) *Parameter` | Get a configuration parameter |
-| `GetAll() []*Parameter` | Get all parameters |
-| `Lookup(filter string) []*Parameter` | Get an array of parameters by prefix |
-| `Bind(object any)` | Bind a struct to the configuration |
-| `BindFrom(object any, prefix string)` | Bind a struct to the configuration with relative path in tags.|
-| | Prefix set root parameter for tag value |
-| `GetArrayValues(key string) []any` | Get array parameter values |
-| `GetIntArray(key string) []int64` | Get values for an integer array parameter |
-| `GetFloatArray(key string) []float64` | Get values for a floating-point array parameter |
-| `GetStringArray(key string) []string` | Get string values for a string array parameter |
+|------|----------|
+| `Init(options *Options)` | Overrides the configuration options |
+| `Apply(ctx context.Context)` | Loads and applies the configuration |
+| `Add(key string, valueType ValueDataType) *Parameter` | Adds a parameter without setting a value |
+| `Set(key string, value any)` | Sets a parameter value (or adds it if it does not exist) |
+| `Get(key string) *Parameter` | Gets a configuration parameter |
+| `GetAll() []*Parameter` | Gets all parameters |
+| `Lookup(filter string) []*Parameter` | Gets an array of parameters by prefix |
+| `Bind(object any)` | Binds a struct to the configuration |
+| `BindFrom(object any, prefix string)` | Binds a struct to the configuration using relative paths to configuration parameters in the `config` tag. |
+| | The prefix sets the starting point from which the configuration is read for the struct |
+| `GetArrayValues(key string) map[string]any` | Gets the values of an array parameter (as "key-value") |
+| `GetIntArray(key string) []int64` | Gets the values for an array parameter with integer values |
+| `GetFloatArray(key string) []float64` | Gets the values for an array parameter with floating-point values |
+| `GetStringArray(key string) []string` | Gets the string values for an array parameter |
 
 ---
 
 ### Parameter
 
-Type for configuration parameter.
+The type of a configuration parameter.
 
 ```go
 type Parameter struct {
-    // Contains parameter data with thread-safe access
+    // Contains configuration parameter data with thread-safe access
 }
 ```
 
 #### Methods
 
 | Method | Description |
-|--------|-------------|
-| `Name() string` | Get the parameter name |
-| `Value() any` | Get the raw parameter value |
-| `Type() reflect.Kind` | Get the generic type of the parameter value |
-| `Int() int64` | Get the parameter value as int64 |
-| `Float() float64` | Get the parameter value as float64 |
-| `Bool() bool` | Get the parameter value as bool |
-| `String() string` | Get the parameter value as string |
-| `SetValue(value any)` | Set the parameter value |
+|------|----------|
+| `Name() string` | Gets the parameter name |
+| `Value() any` | Gets the raw value of the parameter |
+| `Type() reflect.Kind` | Gets the generic type of the parameter value |
+| `Int() int64` | Gets the parameter value as int64 |
+| `Float() float64` | Gets the parameter value as float64 |
+| `Bool() bool` | Gets the parameter value as bool |
+| `String() string` | Gets the parameter value as string |
+| `SetValue(value any)` | Sets the parameter value with conversion to valid value types (int64, float64, bool, string) |
 
 ---
 
 ### StructuredConfiguration
 
-A generic type for working with typed configuration structures.
+A generic type for working with typed configuration structs.
 
 ```go
 type StructuredConfiguration struct {
@@ -201,42 +204,42 @@ type StructuredConfiguration struct {
 #### Functions
 
 | Function | Description |
-|----------|-------------|
-| `NewStructuredConfiguration[T any](options *Options) *T` | Create a typed structured configuration |
+|--------|----------|
+| `NewStructuredConfiguration[T any](options *Options) *T` | Creates a typed structured configuration (the passed type must embed the `StructuredConfiguration` struct) |
 
 #### Methods
 
 | Method | Description |
-|--------|-------------|
-| `Apply()` | Load and apply the configuration from source |
+|------|----------|
+| `Apply(ctx context.Context)` | Loads and applies the configuration |
 
 ---
 
 ### Reader
 
-Interface for reading configuration data from a source.
+An interface for reading configuration data from a source.
 
 ```go
 type Reader interface {
-    Read(source string) ([]byte, error)
+    Read(ctx context.Context, source string) ([]byte, error)
 }
 ```
 
-Implement this interface to create custom readers that can read configuration from any source (files, HTTP, databases, etc.).
+Implement this interface to create custom readers that can read the configuration from any source (files, HTTP, databases, etc.).
 
 ---
 
 ### Parser
 
-Interface for parsing configuration data.
+An interface for parsing configuration data.
 
 ```go
 type Parser interface {
-    Parse(data []byte) (map[string]any, error)
+    Parse(ctx context.Context, data []byte) (map[string]any, error)
 }
 ```
 
-Implement this interface to create custom parsers for different data formats. Register custom parsers using `RegisterParser(format string, parser Parser)`.
+Implement this interface to create custom parsers for different data formats. Register custom parsers via `RegisterParser(format string, parser Parser)`.
 
 ---
 
@@ -247,12 +250,12 @@ Configuration parameter values can be bound to exported struct fields using the 
 Rules:
 
 - Fields must be exported
-- Field type must match the configuration value type
+- The field type must match the configuration value type
 - If a parameter is missing from the file, an environment variable is used (if set)
 
 There are two ways to bind configuration to structs:
 
-### Method 1: Using Bind
+### Method 1: Using the Bind Method
 
 Create a struct with `config` tags, then use the `Bind` and `Apply` methods:
 
@@ -260,6 +263,8 @@ Create a struct with `config` tags, then use the `Bind` and `Apply` methods:
 package main
 
 import (
+    "context"
+
     "github.com/cvartan/goconfig"
 )
 
@@ -273,12 +278,12 @@ func main() {
 
     config := goconfig.NewConfiguration(nil) // Use default options
 
-    config.Bind(&cfg) // Populate struct fields
-    config.Apply() // Read configuration from file and apply parameter values to bound struct attributes
+    config.Bind(&cfg) // Populate the struct fields
+    config.Apply(context.Background()) // Read the configuration from the file and apply the parameter values to the attributes of the bound structs
 }
 ```
 
-If the path to a parameter specified in the value of the config tag is not relative to the configuration root (for example, the configuration contains a separate section used for a structure that may vary from application to application), then in this case it is recommended to use the BindFrom method, which allows you to set a starting prefix — the point from which the configuration for the structure should be read.
+If the path to a parameter specified in the value of the `config` tag is not relative to the configuration root (for example, the configuration has a separate section used for a struct, which may vary from application to application), then in this case it is recommended to use the `BindFrom` method, which allows you to set a starting prefix — the point from which the configuration should be read for the struct.
 
 ### Method 2: Using StructuredConfiguration
 
@@ -288,6 +293,8 @@ Create a struct that embeds `goconfig.StructuredConfiguration`, then initialize 
 package main
 
 import (
+    "context"
+
     "github.com/cvartan/goconfig"
 )
 
@@ -299,12 +306,12 @@ type AppConfig struct {
 }
 
 func main() {
-    // Initialize the structured configuration with options (or nil for defaults)
+    // Initialize the structured configuration with options (or nil for the default values)
     cfg := goconfig.NewStructuredConfiguration[AppConfig](nil)
 
-    cfg.Apply() // Read configuration from file and apply to struct fields
+    cfg.Apply(context.Background()) // Read the configuration from the file and apply it to the struct fields
 
-    // Access configuration values directly from struct fields
+    // Access the configuration values directly through the struct fields
     // fmt.Println(cfg.Name)
     // fmt.Println(cfg.Debug)
 }
@@ -312,15 +319,15 @@ func main() {
 
 The `StructuredConfiguration` approach provides:
 
-- Type-safe configuration access through the struct fields
-- Direct access to configuration methods via the embedded `StructuredConfiguration` (e.g., `cfg.Apply()`)
-- Cleaner code organization by combining configuration structure and behavior
+- Type-safe access to the configuration through the struct fields
+- Direct access to the configuration methods via the embedded `StructuredConfiguration` (e.g., `cfg.Apply()`)
+- Cleaner code organization by combining the configuration struct and behavior
 
 ---
 
-## Limitations
+### Struct Usage Limitations
 
-- Struct fields that are slices or arrays are not supported
+- Struct fields that are slices or arrays are supported only if the array elements are simple values (not structs)
 
 ---
 
