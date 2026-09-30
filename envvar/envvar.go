@@ -1,7 +1,6 @@
 package envvar
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"reflect"
@@ -15,7 +14,7 @@ import (
 var EnvironmentVariables *envVariables
 
 type envVariables struct {
-	mu          *sync.RWMutex
+	mu          sync.RWMutex
 	envFileVars map[string]string
 }
 
@@ -27,35 +26,34 @@ func NewEnvVariables() *envVariables {
 	wd := utils.GetWD()
 	envPath := wd + "/.env"
 
-	file, err := os.Open(envPath)
-	if err == nil {
+	content, err := os.ReadFile(envPath)
+	if err != nil {
 		// .env file is optional, silently ignore if not found
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-
-			// Skip empty lines and comments
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			// Parse KEY=VALUE format
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-
-			// Remove quotes if present
-			value = strings.Trim(value, `"'`)
-
-			e.envFileVars[key] = value
-		}
+		return e
 	}
-	file.Close()
+
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse KEY=VALUE format
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Remove quotes if present
+		value = strings.Trim(value, `"'`)
+
+		e.envFileVars[key] = value
+	}
 
 	return e
 }

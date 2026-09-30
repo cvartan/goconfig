@@ -1,22 +1,19 @@
 package goconfig
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"reflect"
-
-	"github.com/cvartan/goconfig/types"
 )
 
 type StructuredConfiguration struct {
 	C *configuration // Configuration
 }
 
-func (s *StructuredConfiguration) Apply() {
+func (s *StructuredConfiguration) Apply(ctx context.Context) {
 	if s.C == nil {
 		panic("Configuration is not defined. Before, use GenerateStructuredConfiguration function for create structured configuration.")
 	}
-	s.C.apply()
+	s.C.apply(ctx)
 }
 
 var nestedConfigType reflect.Type = reflect.ValueOf(StructuredConfiguration{}).Type()
@@ -29,10 +26,10 @@ func NewStructuredConfiguration[T any](options *Options) *T {
 		conf := &configuration{}
 		conf.init(options)
 		conf.bind(holding, "")
-		err := conf.apply()
-		if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
-			panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
-		}
+		// err := conf.apply()
+		// if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+		// 	panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
+		// }
 
 		holdingValue.Field(i).Field(0).Set(reflect.ValueOf(conf))
 		return holding

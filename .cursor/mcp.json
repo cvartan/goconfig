@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "todo-mcp": {
+      "command": "node",
+      "args": [
+        "/home/cvartan/.vscode-oss/extensions/hurtis.todo-2.0.0-universal/bin/todo-mcp.js",
+        "--workspace",
+        "/home/cvartan/Projects/goconfig"
+      ]
+    }
+  }
+}

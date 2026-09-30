@@ -106,10 +106,10 @@ type Options struct {
 2. **Статически** — через опции, при создании конфигурации
 3. **Динамически** — через флаги приложения:
 
-- `-config.path=/opt/app/config`
-- `-config.filename=config.yml`
-- `-config.format=yaml`
-- `-config.source=/opt/app/config/config.yml` (при указании этого параметра, параметры config.path и config.filename не используются)
+- `-config.path=/opt/app/config` — задание пути к каталогу с файлом (не должен заканчиваться разделителем "/")
+- `-config.filename=config.yml` — задание имени файла конфигурации
+- `-config.format=yaml` — задание формата содержимого конфигурации
+- `-config.source=/opt/app/config/config.yml` — задание полного пути к файлу с конфигурацией (при указании этого параметра, параметры config.path и config.filename не используются) или задание другого адреса нахождения данных конфигурации, например, адрес метода API который вернет данные конфигурации (в этом случае требуется собственная реализация ридера)
 
 ---
 
@@ -144,21 +144,23 @@ func NewConfiguration(options *Options) *Configuration
 ```
 
 Создаёт новый менеджер конфигурации с указанными опциями. Передайте `nil` для использования опций по умолчанию.
+Но перед использованием конфигурации необходимо вызвать метод Apply().
 
 #### Методы
 
 | Метод | Описание |
 |------|----------|
-| `Apply()` | Загрузка и применение конфигурации |
+| `Init(options *Options)` | Переопределение опций конфигурации |
+| `Apply(ctx context.Context)` | Загрузка и применение конфигурации |
 | `Add(key string, valueType ValueDataType) *Parameter` | Добавление параметра без установки значения |
 | `Set(key string, value any)` | Установка значения параметра (или добавление при его отсутствии) |
 | `Get(key string) *Parameter` | Получение параметра конфигурации |
 | `GetAll() []*Parameter` | Получение всех параметров |
 | `Lookup(filter string) []*Parameter` | Получение массива параметров по префиксу |
 | `Bind(object any)` | Привязка структуры к конфигурации |
-| `Bind(object any, prefix string)`| Привязка структуры к конфигурации, но с относительными путями к параметрам конфигурации в тэге `config`.| 
+| `BindFrom(object any, prefix string)`| Привязка структуры к конфигурации, но с относительными путями к параметрам конфигурации в тэге `config`.| 
 | | Префикс задает начальную точку для чтения конфигурации для структуры|
-| `GetArrayValues(key string) []any` | Получение значений массива параметров |
+| `GetArrayValues(key string) map[string]any` | Получение значений массива параметров (в виде "ключ-значение") |
 | `GetIntArray(key string) []int64` | Получение значений для массива параметров с целочисленными значениями |
 | `GetFloatArray(key string) []float64` | Получение значений для массива параметров со значениями с плавающей точкой |
 | `GetStringArray(key string) []string` | Получение массива строковых значений для массива параметров |
@@ -171,7 +173,7 @@ func NewConfiguration(options *Options) *Configuration
 
 ```go
 type Parameter struct {
-    // Содержит данные параметра с потокобезопасным доступом
+    // Содержит данные параметра конфигурации с потокобезопасным доступом
 }
 ```
 
@@ -186,7 +188,7 @@ type Parameter struct {
 | `Float() float64` | Получение значения параметра с типом float64 |
 | `Bool() bool` | Получение значения параметра с типом bool |
 | `String() string` | Получение значения параметра с типом string |
-| `SetValue(value any)` | Установка значения параметра |
+| `SetValue(value any)` | Установка значения параметра с приведением к допустимым типам значений (int64, float64, bool, string) |
 
 ---
 
@@ -204,13 +206,13 @@ type StructuredConfiguration struct {
 
 | Функция | Описание |
 |--------|----------|
-| `NewStructuredConfiguration[T any](options *Options) *T` | Создание типизированной структурированной конфигурации |
+| `NewStructuredConfiguration[T any](options *Options) *T` | Создание типизированной структурированной конфигурации (в передаваемом типе должна быть вложена структура StructuredConfiguration) |
 
 #### Методы
 
 | Метод | Описание |
 |------|----------|
-| `Apply()` | Загрузка и применение конфигурации |
+| `Apply(ctx context.Context)` | Загрузка и применение конфигурации |
 
 ---
 
@@ -220,7 +222,7 @@ type StructuredConfiguration struct {
 
 ```go
 type Reader interface {
-    Read(source string) ([]byte, error)
+    Read(ctx context.Context, source string) ([]byte, error)
 }
 ```
 
@@ -234,7 +236,7 @@ type Reader interface {
 
 ```go
 type Parser interface {
-    Parse(data []byte) (map[string]any, error)
+    Parse(ctx context.Context, data []byte) (map[string]any, error)
 }
 ```
 
@@ -262,6 +264,8 @@ type Parser interface {
 package main
 
 import (
+    "context"
+
     "github.com/cvartan/goconfig"
 )
 
@@ -276,7 +280,7 @@ func main() {
     config := goconfig.NewConfiguration(nil) // Используем опции по умолчанию
 
     config.Bind(&cfg) // Заполняем поля структуры
-    config.Apply() // Читаем конфигурацию из файла и применяем значения параметров на атрибуты связанных структур
+    config.Apply(context.Background()) // Читаем конфигурацию из файла и применяем значения параметров на атрибуты связанных структур
 }
 ```
 
@@ -290,6 +294,8 @@ func main() {
 package main
 
 import (
+    "context"
+
     "github.com/cvartan/goconfig"
 )
 
@@ -304,7 +310,7 @@ func main() {
     // Инициализируем структурированную конфигурацию с опциями (или nil для значений по умолчанию)
     cfg := goconfig.NewStructuredConfiguration[AppConfig](nil)
 
-    cfg.Apply() // Читаем конфигурацию из файла и применяем к полям структуры
+    cfg.Apply(context.Background()) // Читаем конфигурацию из файла и применяем к полям структуры
 
     // Доступ к значениям конфигурации напрямую через поля структуры
     // fmt.Println(cfg.Name)
@@ -320,9 +326,9 @@ func main() {
 
 ---
 
-## Ограничения
+### Ограничения использования структур
 
-- Поля структур, являющиеся срезами или массивами, не поддерживаются
+- Поля структур, являющиеся срезами или массивами, поддерживаются только если элементами массива являются простые значения (не структуры)
 
 ---
 

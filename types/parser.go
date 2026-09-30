@@ -1,7 +1,9 @@
 package types
 
+import "context"
+
 type Parser interface {
-	Parse(data []byte) (map[string]any, error)
+	Parse(ctx context.Context, data []byte) (map[string]any, error)
 }
 
 var parsers map[string]Parser

@@ -1,6 +1,8 @@
 package tomlparser
 
 import (
+	"context"
+
 	"github.com/cvartan/goconfig/mapconv"
 	"github.com/cvartan/goconfig/types"
 	toml "github.com/pelletier/go-toml/v2"
@@ -8,7 +10,7 @@ import (
 
 type TomlConfigurationParser struct{}
 
-func (r *TomlConfigurationParser) Parse(data []byte) (props map[string]any, err error) {
+func (r *TomlConfigurationParser) Parse(ctx context.Context, data []byte) (props map[string]any, err error) {
 
 	var propertySource map[string]any
 	err = toml.Unmarshal(data, &propertySource)

@@ -141,6 +141,7 @@ func NewConfiguration(options *Options) *Configuration
 ```
 
 Creates a new configuration manager with the specified options. Pass `nil` to use default options.
+Before use the configuration use Apply().
 
 #### Methods
 

@@ -1,6 +1,7 @@
 package goconfig_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -33,6 +34,10 @@ type TestConfig2 struct {
 	FloatAttr  float64 `config:"test_float"`
 	BoolAttr   bool    `config:"test_bool"`
 	StringAttr string  `config:"test_str"`
+}
+
+type TestConfig3 struct {
+	IntArray []int `config:"test.test_array_values"`
 }
 
 var jsonConfig string = `
@@ -174,19 +179,19 @@ func checkConfig(config *goconfig.Configuration, t *testing.T) {
 	assert.Equal(t, int64(200), config.Get("test.test_array_values.1").Int())
 	assert.Equal(t, int64(300), config.Get("test.test_array_values.2").Int())
 
-	values := config.Lookup("test.test_array_values.")
+	values := config.GetArrayValues("test.test_array_values")
 
-	i0 := values[0].Int()
-	i1 := values[1].Int()
-	i2 := values[2].Int()
+	i0 := values["test.test_array_values.0"].(int64)
+	i1 := values["test.test_array_values.1"].(int64)
+	i2 := values["test.test_array_values.2"].(int64)
 
 	assert.ElementsMatch(t, []int64{100, 200, 300}, []int64{i0, i1, i2})
 
-	values_arr := config.GetIntArray("test.test_array_values")
-	assert.ElementsMatch(t, []int64{100, 200, 300}, values_arr)
+	valuesArr := config.GetIntArray("test.test_array_values")
+	assert.ElementsMatch(t, []int64{100, 200, 300}, valuesArr)
 
-	float_values_arr := config.GetFloatArray("test.test_float_array_values")
-	assert.ElementsMatch(t, []float64{100.00, 200.00, 300.00}, float_values_arr)
+	floatValuesArr := config.GetFloatArray("test.test_float_array_values")
+	assert.ElementsMatch(t, []float64{100.00, 200.00, 300.00}, floatValuesArr)
 
 	assert.Equal(t, "value1", config.Get("test.test_array_obj.0.name").String())
 	assert.Equal(t, int64(100), config.Get("test.test_array_obj.0.value").Int())
@@ -217,6 +222,13 @@ func checkStruct(obj *TestConfig, t *testing.T) {
 	assert.Equal(t, true, obj.SubStructAttr.BoolEnvAttr)
 }
 
+func checkStruct3(obj *TestConfig3, t *testing.T) {
+	i1 := obj.IntArray[0]
+	i2 := obj.IntArray[1]
+	i3 := obj.IntArray[2]
+	assert.ElementsMatch(t, []int{100, 200, 300}, []int{i1, i2, i3})
+}
+
 func addEmptyParams(config *goconfig.Configuration) {
 	config.Add("goconfig.add.string", goconfig.String)
 	config.Add("goconfig.add.int", goconfig.Int)
@@ -232,11 +244,11 @@ func TestReadJsonConfig(t *testing.T) {
 	}
 	defer deleteFile(cfile)
 
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Panic in test with message: %v", r)
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		t.Errorf("Panic in test with message: %v", r)
+	// 	}
+	// }()
 
 	addEnvVariables()
 
@@ -249,11 +261,16 @@ func TestReadJsonConfig(t *testing.T) {
 
 	obj := &TestConfig{}
 	config.Bind(obj)
+
+	obj3 := &TestConfig3{}
+	config.Bind(obj3)
+
 	addEmptyParams(config)
-	config.Apply()
+	config.Apply(context.Background())
 
 	checkConfig(config, t)
 	checkStruct(obj, t)
+	checkStruct3(obj3, t)
 
 }
 
@@ -283,7 +300,7 @@ func TestReadYamlConfig(t *testing.T) {
 	obj := &TestConfig{}
 	config.Bind(obj)
 	addEmptyParams(config)
-	config.Apply()
+	config.Apply(context.Background())
 
 	checkConfig(config, t)
 	checkStruct(obj, t)
@@ -316,7 +333,7 @@ func TestReadTomlConfig(t *testing.T) {
 	obj := &TestConfig{}
 	config.Bind(obj)
 	addEmptyParams(config)
-	config.Apply()
+	config.Apply(context.Background())
 
 	checkConfig(config, t)
 	checkStruct(obj, t)
@@ -343,7 +360,7 @@ func TestStructureConfiguration(t *testing.T) {
 	}
 
 	obj := goconfig.NewStructuredConfiguration[TestConfigurationStructure](options)
-	//obj.Apply()
+	obj.Apply(context.Background())
 	checkStruct(&obj.TestConfig, t)
 }
 
@@ -416,6 +433,8 @@ func TestRelativeConfigurationTag(t *testing.T) {
 	ts := &TestConfig2{}
 
 	config.BindFrom(ts, "test")
+
+	config.Apply(context.Background())
 
 	assert.Equal(t, 100, ts.IntAttr)
 	assert.Equal(t, 100.00, ts.FloatAttr)

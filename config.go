@@ -1,7 +1,7 @@
 package goconfig
 
 import (
-	"errors"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -40,21 +40,24 @@ type Configuration struct {
 }
 
 type configuration struct {
-	mu         sync.RWMutex
-	properties map[string]*Parameter
-	reader     types.Reader
-	parser     types.Parser
-	source     string
+	reader types.Reader
+	parser types.Parser
+	source string
+
+	mu          sync.RWMutex
+	properties  map[string]*Parameter       // Simple properties
+	arrayFields map[string][]*fieldListItem // Struct's fields with array value (key = property key without index)
 }
 
 type fieldListItem struct {
 	parentStruct reflect.Value       // Structure the field belongs to
 	field        reflect.StructField // Field
 	fieldType    reflect.Kind        // Field data type
-	configVar    string              // Configuration parameter associated with this field
+	isArray      bool                // Field has array of values
 }
 
 func (f *fieldListItem) setValue(value *Parameter) {
+
 	if value.value == nil {
 		return
 	}
@@ -64,10 +67,8 @@ func (f *fieldListItem) setValue(value *Parameter) {
 			if value.Type() != reflect.Float64 {
 				panic(fmt.Sprintf("[config:struct:01] incorrect type for field %s (must be float)", f.field.Name))
 			}
-			floatval, ok := value.Value().(float64)
-			if !ok {
-				panic(fmt.Sprintf("[config:struct:02] incorrect type conversion for float field %s", f.field.Name))
-			}
+			floatval := value.Value().(float64)
+
 			floatf := f.parentStruct.FieldByName(f.field.Name)
 			if floatf.OverflowFloat(floatval) {
 				panic(fmt.Sprintf("[config:struct:03] can't set float64 value %f for float field %s", floatval, f.field.Name))
@@ -123,10 +124,87 @@ func (f *fieldListItem) setValue(value *Parameter) {
 				panic(fmt.Sprintf("[config:struct:11] incorrect type conversion for string field %s", f.field.Name))
 			}
 			f.parentStruct.FieldByName(f.field.Name).SetString(strval)
-			f.fieldType = reflect.String
+			// f.fieldType = reflect.String
 		}
 	}
 
+}
+
+func (f *fieldListItem) setArrayValues(values []*Parameter) {
+	f1 := f.parentStruct.FieldByName(f.field.Name)
+	arrValue := reflect.MakeSlice(f1.Type(), len(values), len(values))
+	for i, p := range values {
+		switch f.fieldType {
+		case reflect.Float64:
+			{
+				if p.Type() != reflect.Float64 {
+					panic(fmt.Sprintf("[config:struct:12] incorrect type for field %s (must be float)", f.field.Name))
+				}
+				floatval := p.Value().(float64)
+
+				if arrValue.Index(i).OverflowFloat(floatval) {
+					panic(fmt.Sprintf("[config:struct:14] can't set float64 value %f for float field %s", floatval, f.field.Name))
+				}
+
+				arrValue.Index(i).SetFloat(floatval)
+
+			}
+		case reflect.Int64:
+			{
+				if p.Type() != reflect.Int64 {
+					panic(fmt.Sprintf("[config:struct:15] incorrect type for field %s (must be integer)", f.field.Name))
+				}
+
+				intval := p.Value().(int64)
+
+				if arrValue.Index(i).OverflowInt(intval) {
+					panic(fmt.Sprintf("[config:struct:16] can't set int64 value %d for integer field %s", intval, f.field.Name))
+				}
+
+				arrValue.Index(i).SetInt(intval)
+			}
+		case reflect.Uint64:
+			{
+				if p.Type() != reflect.Int64 {
+					panic(fmt.Sprintf("[config:struct:17] incorrect type for field %s (must be integer)", f.field.Name))
+				}
+
+				intval := uint64(p.Value().(int64))
+
+				if arrValue.Index(i).OverflowUint(intval) {
+					panic(fmt.Sprintf("[config:struct:18] can't set uint64 value %d for unsigned integer field %s", intval, f.field.Name))
+				}
+
+				arrValue.Index(i).SetUint(intval)
+			}
+		case reflect.Bool:
+			{
+				if p.Type() != reflect.Bool {
+					panic(fmt.Sprintf("[config:struct:19] incorrect type for field %s (must be boolean)", f.field.Name))
+				}
+				boolval, ok := p.Value().(bool)
+				if !ok {
+					panic(fmt.Sprintf("[config:struct:20] incorrect type conversion for boolean field %s", f.field.Name))
+				}
+
+				arrValue.Index(i).SetBool(boolval)
+			}
+		case reflect.String:
+			{
+				if p.Type() != reflect.String {
+					panic(fmt.Sprintf("[config:struct:21] incorrect type for field %s (must be string)", f.field.Name))
+				}
+				strval, ok := p.Value().(string)
+				if !ok {
+					panic(fmt.Sprintf("[config:struct:22] incorrect type conversion for string field %s", f.field.Name))
+				}
+
+				arrValue.Index(i).SetString(strval)
+				// f.fieldType = reflect.String
+			}
+		}
+	}
+	f1.Set(arrValue)
 }
 
 var (
@@ -173,17 +251,15 @@ func NewConfiguration(options *Options) *Configuration {
 
 	cm.c.init(options)
 
-	err := cm.c.apply()
-	if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
-		panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
-	}
+	// err := cm.c.apply()
+	// if err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+	// 	panic(fmt.Sprintf("can't create configuration manager with error:\n%v", err))
+	// }
 
 	return cm
 }
 
 func (cm *configuration) init(options *Options) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
 
 	opt := options
 
@@ -226,6 +302,11 @@ func (cm *configuration) init(options *Options) {
 	if cm.properties == nil {
 		cm.properties = make(map[string]*Parameter, initMapLen)
 	}
+
+	if cm.arrayFields == nil {
+		cm.arrayFields = make(map[string][]*fieldListItem, initMapLen)
+	}
+
 	cm.reader = opt.Reader
 	cm.parser = opt.Parser
 	cm.source = opt.Source
@@ -234,8 +315,6 @@ func (cm *configuration) init(options *Options) {
 
 // Add or modify parameter value
 func (cm *configuration) setParameterValue(key string, value any) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
 
 	v := value
 
@@ -248,17 +327,27 @@ func (cm *configuration) setParameterValue(key string, value any) {
 	}
 
 	var (
-		cv *Parameter
+		p  *Parameter
 		ok bool
 	)
 
-	cv, ok = cm.properties[key]
+	p, ok = cm.properties[key]
 
 	if !ok {
-		cv = cm.add(key, utils.TypeSimplified(reflect.TypeOf(v).Kind()))
+		p = cm.add(key, utils.TypeSimplified(reflect.TypeOf(v).Kind()))
 	}
 
-	cv.SetValue(v)
+	p.SetValue(v)
+
+	// Обработка для параметров с массивами простых значений
+	if akey, ok := checkEndingInt(key); ok {
+		ps := cm.lookup(akey)
+		if fs, ok := cm.arrayFields[akey]; ok {
+			for _, f := range fs {
+				f.setArrayValues(ps)
+			}
+		}
+	}
 }
 
 // Add new parameter with nil value.
@@ -289,6 +378,13 @@ func (cm *configuration) add(key string, valueType reflect.Kind) *Parameter {
 
 	cm.properties[key] = p
 
+	// Обработка параметров с массивами простых значений
+	if akey, ok := checkEndingInt(key); ok {
+		if _, ok := cm.arrayFields[akey]; !ok {
+			cm.arrayFields[akey] = make([]*fieldListItem, 0, 1)
+		}
+	}
+
 	return p
 }
 
@@ -304,7 +400,7 @@ func (cm *Configuration) Set(key string, value any) {
 	cm.c.setParameterValue(key, value)
 }
 
-func (cm *configuration) apply() error {
+func (cm *configuration) apply(ctx context.Context) error {
 
 	if cm.reader == nil {
 		panic("[config:read:01] configuration reader is not defined")
@@ -314,12 +410,12 @@ func (cm *configuration) apply() error {
 		panic("[config.read:04] configuration parser is not defined")
 	}
 
-	fs, err := cm.reader.Read(cm.source)
+	fs, err := cm.reader.Read(ctx, cm.source)
 	if err != nil {
 		return err
 	}
 
-	props, err := cm.parser.Parse(fs)
+	props, err := cm.parser.Parse(ctx, fs)
 	if err != nil {
 		return err
 	}
@@ -340,8 +436,8 @@ func (cm *configuration) apply() error {
 }
 
 // Load and apply the configuration from source
-func (cm *Configuration) Apply() error {
-	return cm.c.apply()
+func (cm *Configuration) Apply(ctx context.Context) error {
+	return cm.c.apply(ctx)
 }
 
 // Replaces value if the configuration parameter value was specified in format ${env_value:default_value}
@@ -549,11 +645,11 @@ func (cm *Configuration) GetAll() (parameters []*Parameter) {
 }
 
 // Get parameters by prefix
-func (cm *Configuration) Lookup(filter string) (parameters []*Parameter) {
-	cm.c.mu.Lock()
-	defer cm.c.mu.Unlock()
-	parameters = make([]*Parameter, 0, len(cm.c.properties))
-	for _, v := range cm.c.properties {
+func (cm *configuration) lookup(filter string) (parameters []*Parameter) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	parameters = make([]*Parameter, 0, len(cm.properties))
+	for _, v := range cm.properties {
 		if strings.HasPrefix(v.Name(), strings.ToLower(filter)) {
 			parameters = append(parameters, v)
 		}
@@ -569,19 +665,32 @@ func checkEndingDot(param string) string {
 	return param
 }
 
+func checkEndingInt(param string) (string, bool) {
+	p := strings.Split(param, ".")
+	if len(p) > 1 {
+		ls := p[len(p)-1]
+		if _, err := strconv.Atoi(ls); err == nil {
+			p = p[:len(p)-1]
+			return strings.Join(p, "."), true
+		}
+	}
+
+	return param, false
+}
+
 // Get values for an array parameter
-func (cm *Configuration) GetArrayValues(key string) (values []any) {
-	parameters := cm.Lookup(checkEndingDot(key))
-	values = make([]any, 0, len(parameters))
+func (cm *Configuration) GetArrayValues(key string) (values map[string]any) {
+	parameters := cm.c.lookup(checkEndingDot(key))
+	values = make(map[string]any, len(parameters))
 	for _, v := range parameters {
-		values = append(values, v.value)
+		values[v.Name()] = v.Value()
 	}
 	return
 }
 
 // Get integer values for an array parameter
 func (cm *Configuration) GetIntArray(key string) (values []int64) {
-	parameters := cm.Lookup(checkEndingDot(key))
+	parameters := cm.c.lookup(checkEndingDot(key))
 	values = make([]int64, 0, len(parameters))
 
 	for _, p := range parameters {
@@ -592,7 +701,7 @@ func (cm *Configuration) GetIntArray(key string) (values []int64) {
 
 // Get float values for an array parameter
 func (cm *Configuration) GetFloatArray(key string) (values []float64) {
-	parameters := cm.Lookup(checkEndingDot(key))
+	parameters := cm.c.lookup(checkEndingDot(key))
 	values = make([]float64, 0, len(parameters))
 
 	for _, p := range parameters {
@@ -603,7 +712,7 @@ func (cm *Configuration) GetFloatArray(key string) (values []float64) {
 
 // Get string values for an array parameter
 func (cm *Configuration) GetStringArray(key string) (values []string) {
-	parameters := cm.Lookup(checkEndingDot(key))
+	parameters := cm.c.lookup(checkEndingDot(key))
 	values = make([]string, 0, len(parameters))
 
 	for _, p := range parameters {
@@ -648,8 +757,6 @@ func (cm *configuration) bind(object any, prefix string) {
 		panic("[config:bind:02] binded object is not struct")
 	}
 
-	
-
 	cm.collectStructFields(c, c.Type(), prefix)
 
 }
@@ -665,8 +772,19 @@ func (cm *configuration) collectStructFields(structValue reflect.Value, structFi
 			}
 		case reflect.Array, reflect.Slice:
 			{
-				// TODO: apparently someday we need to figure out how to work with arrays in struct attributes
-				continue
+				// Сейчас закладываемся на то, что в поле будет массив из простых типов (строка, число, логический), без структур
+
+				switch f.Type.Elem().Kind() {
+				case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+					{
+						cm.bindStructField(&fieldListItem{
+							parentStruct: structValue,
+							field:        f,
+							fieldType:    utils.TypeSimplified(f.Type.Elem().Kind()),
+							isArray:      true,
+						}, prefix)
+					}
+				}
 			}
 		case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
 			{
@@ -674,6 +792,7 @@ func (cm *configuration) collectStructFields(structValue reflect.Value, structFi
 					parentStruct: structValue,
 					field:        f,
 					fieldType:    utils.TypeSimplified(f.Type.Kind()),
+					isArray:      false,
 				}, prefix)
 			}
 		}
@@ -684,6 +803,14 @@ func (cm *configuration) collectStructFields(structValue reflect.Value, structFi
 func (cm *configuration) bindStructField(f *fieldListItem, prefix string) {
 	tagValue := prefix + f.field.Tag.Get("config")
 	if tagValue != "" {
+		// Если массив, то обрабатываем массив, но не добавляем параметр (так как этот тэг будет использоваться вместе с индексами, а в чистом виде - нет)
+		if f.isArray {
+			if _, ok := cm.arrayFields[tagValue]; !ok {
+				cm.arrayFields[tagValue] = []*fieldListItem{f}
+			}
+			return
+		}
+
 		// Check that existing property has same data type as struct attribute
 		if p, ok := cm.properties[tagValue]; ok {
 			p.bindStructField(f)
@@ -699,9 +826,9 @@ func (cm *configuration) bindStructField(f *fieldListItem, prefix string) {
 // Init configuration with options (if in NewConfiguration functions options was nil)
 func (cm *Configuration) Init(options Options) {
 	cm.c.init(&options)
-	if err := cm.c.apply(); err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
-		panic(fmt.Sprintf("can't init configuration manager with error:\n%v", err))
-	}
+	// if err := cm.c.apply(); err != nil && !(errors.Is(err, &types.ReadConfigurationSourceError{}) || errors.Is(err, &types.ParseConfigurationDataError{})) {
+	// 	panic(fmt.Sprintf("can't init configuration manager with error:\n%v", err))
+	// }
 }
 
 func init() {

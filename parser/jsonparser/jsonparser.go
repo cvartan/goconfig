@@ -2,6 +2,7 @@ package jsonparser
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -13,7 +14,7 @@ import (
 type JsonConfigurationParser struct {
 }
 
-func (r *JsonConfigurationParser) Parse(data []byte) (props map[string]any, err error) {
+func (r *JsonConfigurationParser) Parse(ctx context.Context, data []byte) (props map[string]any, err error) {
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()

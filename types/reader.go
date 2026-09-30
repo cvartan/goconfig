@@ -1,5 +1,7 @@
 package types
 
+import "context"
+
 type Reader interface {
-	Read(source string) ([]byte, error)
+	Read(ctx context.Context, source string) ([]byte, error)
 }
