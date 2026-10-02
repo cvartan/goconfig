@@ -104,12 +104,6 @@ The configuration file can be specified in one of the following ways:
 
 1. **Default** — `config.json` in the application's working directory
 2. **Statically** — via options when creating the configuration
-3. **Dynamically** — via application flags:
-
-- `-config.path=/opt/app/config` — sets the path to the directory with the configuration file (must not end with a "/" separator)
-- `-config.filename=config.yml` — sets the name of the configuration file
-- `-config.format=yaml` — sets the format of the configuration content
-- `-config.source=/opt/app/config/config.yml` — sets the full path to the configuration file (when this flag is specified, the `config.path` and `config.filename` flags are not used) or another location of the configuration data, for example, the URL of an API method that returns the configuration data (in this case, a custom reader implementation is required)
 
 ---
 

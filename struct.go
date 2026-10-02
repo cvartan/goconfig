@@ -9,11 +9,11 @@ type StructuredConfiguration struct {
 	C *configuration // Configuration
 }
 
-func (s *StructuredConfiguration) Apply(ctx context.Context) {
+func (s *StructuredConfiguration) Apply(ctx context.Context) error {
 	if s.C == nil {
 		panic("Configuration is not defined. Before, use GenerateStructuredConfiguration function for create structured configuration.")
 	}
-	s.C.apply(ctx)
+	return s.C.apply(ctx)
 }
 
 var nestedConfigType reflect.Type = reflect.ValueOf(StructuredConfiguration{}).Type()

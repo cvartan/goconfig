@@ -207,12 +207,7 @@ func (f *fieldListItem) setArrayValues(values []*Parameter) {
 	f1.Set(arrValue)
 }
 
-var (
-	defaultPath       string = *flag.String("config.path", utils.GetWD(), "path to the configuration file")
-	defaultFormat     string = *flag.String("config.format", "json", "format of the configuration file")
-	defaultFileName   string = *flag.String("config.filename", "config."+defaultFormat, "name of the configuration file")
-	defaultFileSource string = *flag.String("config.source", "", "path to configuration sources")
-)
+var ()
 
 type ValueDataType int
 
@@ -261,6 +256,8 @@ func NewConfiguration(options *Options) *Configuration {
 
 func (cm *configuration) init(options *Options) {
 
+	flag.Parse()
+
 	opt := options
 
 	if options == nil {
@@ -268,23 +265,19 @@ func (cm *configuration) init(options *Options) {
 	}
 
 	if opt.Format == "" {
-		opt.Format = defaultFormat
+		opt.Format = "json"
 	}
 
 	if opt.Path == "" {
-		opt.Path = defaultPath
+		opt.Path = utils.GetWD()
 	}
 
 	if opt.Filename == "" {
-		opt.Filename = defaultFileName
+		opt.Filename = fmt.Sprintf("config.%s", opt.Format)
 	}
 
 	if opt.Source == "" {
-		if defaultFileSource == "" {
-			opt.Source = fmt.Sprintf("%s%s%s", opt.Path, string(os.PathSeparator), opt.Filename)
-		} else {
-			opt.Source = defaultFileSource
-		}
+		opt.Source = fmt.Sprintf("%s%s%s", opt.Path, string(os.PathSeparator), opt.Filename)
 	}
 
 	if opt.Reader == nil {
@@ -586,8 +579,7 @@ func correctNumberValues(props map[string]any) {
 // Replace property values if there is an environment variable in the corresponding format that defines a different value (e.g., for overriding properties from the configuration file when running the application in Docker)
 func replaceByEnvValues(value *Parameter) {
 
-	envVar := strings.ReplaceAll(value.name, ".", "_")
-	envVal := envvar.EnvironmentVariables.GetValue(strings.ToUpper(envVar))
+	envVal := envvar.EnvironmentVariables.GetValue(utils.ToEnvString(value.name))
 	if envVal != "" {
 		switch value.Type() {
 		case reflect.Int64:

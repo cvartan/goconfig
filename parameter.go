@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/cvartan/goconfig/envvar"
 	"github.com/cvartan/goconfig/utils"
 )
 
@@ -126,10 +127,16 @@ func (p *Parameter) SetValue(value any) {
 		return
 	}
 
+	val := value
+
+	if ev := envvar.EnvironmentVariables.GetValueForType(utils.ToEnvString(p.name), p.valueType); ev != nil {
+		val = ev
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	switch t := utils.TypeSimplified(reflect.TypeOf(value).Kind()); t {
+	switch t := utils.TypeSimplified(reflect.TypeOf(val).Kind()); t {
 	case reflect.Int64, reflect.Uint64, reflect.Float64, reflect.Bool, reflect.String:
 		{
 			tp := t
@@ -144,20 +151,20 @@ func (p *Parameter) SetValue(value any) {
 			switch tp {
 			case reflect.Int64:
 				{
-					p.value = utils.AnyToInt64(value)
+					p.value = utils.AnyToInt64(val)
 				}
 			case reflect.Float64:
 				{
-					p.value = utils.AnyToFloat64(value)
+					p.value = utils.AnyToFloat64(val)
 				}
 			case reflect.Bool:
 				{
-					p.value = value.(bool)
+					p.value = val.(bool)
 
 				}
 			case reflect.String:
 				{
-					p.value = value.(string)
+					p.value = val.(string)
 				}
 			}
 

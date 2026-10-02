@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 func GetWD() string {
@@ -58,4 +59,8 @@ func StringValueToTypedValue(value string) any {
 	}
 
 	return value
+}
+
+func ToEnvString(value string) string {
+	return strings.ToUpper(strings.ReplaceAll(value, ".", "_"))
 }
