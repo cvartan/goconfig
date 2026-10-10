@@ -803,14 +803,18 @@ func (cm *configuration) bindStructField(f *fieldListItem, prefix string) {
 			return
 		}
 
+		var (
+			p  *Parameter
+			ok bool
+		)
+
 		// Check that existing property has same data type as struct attribute
-		if p, ok := cm.properties[tagValue]; ok {
-			p.bindStructField(f)
-			return
+		if p, ok = cm.properties[tagValue]; !ok {
+			p = cm.add(tagValue, f.fieldType)
 		}
 
 		// Add new property
-		p := cm.add(tagValue, f.fieldType)
+
 		p.bindStructField(f)
 	}
 }
